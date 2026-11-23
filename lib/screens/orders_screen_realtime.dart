@@ -1626,18 +1626,33 @@ class _ItemRow extends StatelessWidget {
 
     if (title.isEmpty) title = 'Item';
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: _P.canvas,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _P.border.withOpacity(0.6)),
+      ),
       child: Row(
         children: [
-          Container(width: 6, height: 6, decoration: const BoxDecoration(color: _P.azure, shape: BoxShape.circle)),
-          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: _P.azureSoft,
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Text('${qty}x', style: _T.heading(11.5, c: _P.azure)),
+          ),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
-              qty > 1 ? '$title (x$qty)' : title,
-              style: _T.body(13, c: _P.textPrimary),
+              title,
+              style: _T.heading(12.5, c: _P.textPrimary),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
+          const SizedBox(width: 8),
           Text('£$priceStr', style: _T.label(13, c: _P.emerald)),
         ],
       ),
@@ -2078,7 +2093,7 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
   Widget build(BuildContext context) {
     final isMobile = Responsive.isMobile(context);
     final width = MediaQuery.sizeOf(context).width;
-    final dialogWidth = isMobile ? width * 0.95 : (width > 800 ? 740.0 : width * 0.9);
+    final dialogWidth = isMobile ? width : (width > 800 ? 760.0 : width * 0.92);
 
     final oldTotal = (widget.order['transactionAmount'] as num?)?.toDouble() ??
         (widget.order['totalAmount'] as num?)?.toDouble() ??
@@ -2099,10 +2114,12 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      insetPadding: isMobile
+          ? const EdgeInsets.symmetric(horizontal: 8, vertical: 12)
+          : const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: Container(
         width: dialogWidth,
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.9),
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * (isMobile ? 0.96 : 0.90)),
         decoration: BoxDecoration(
           color: _P.card,
           borderRadius: BorderRadius.circular(20),
@@ -2115,23 +2132,23 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
           children: [
             // ── Header ──────────────────────────────────────────────────────────
             Container(
-              padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
+              padding: EdgeInsets.fromLTRB(isMobile ? 14 : 20, isMobile ? 14 : 18, isMobile ? 8 : 16, isMobile ? 14 : 16),
               decoration: const BoxDecoration(
                 color: Color(0xFF0F172A),
               ),
               child: Row(
                 children: [
                   Container(
-                    width: 42,
-                    height: 42,
+                    width: isMobile ? 36 : 42,
+                    height: isMobile ? 36 : 42,
                     decoration: BoxDecoration(
                       color: _P.azure.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: _P.azure.withOpacity(0.4)),
                     ),
-                    child: const Icon(Icons.inventory_2_rounded, color: Color(0xFF34D399), size: 22),
+                    child: Icon(Icons.inventory_2_rounded, color: const Color(0xFF34D399), size: isMobile ? 19 : 22),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2139,7 +2156,7 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
                         Text(
                           'Itemize Order & Update Bill',
                           style: GoogleFonts.plusJakartaSans(
-                            fontSize: 18,
+                            fontSize: isMobile ? 15.5 : 18,
                             fontWeight: FontWeight.w800,
                             color: Colors.white,
                           ),
@@ -2147,7 +2164,8 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
                         const SizedBox(height: 2),
                         Text(
                           'Order #${widget.order['orderId'] ?? widget.order['id']} · ${widget.bookingData['firstName'] ?? ''} ${widget.bookingData['lastName'] ?? ''}',
-                          style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF94A3B8)),
+                          style: GoogleFonts.plusJakartaSans(fontSize: isMobile ? 11.5 : 12.5, color: const Color(0xFF94A3B8)),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
@@ -2155,6 +2173,7 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
                   IconButton(
                     onPressed: _saving ? null : () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                    splashRadius: 20,
                   ),
                 ],
               ),
@@ -2163,7 +2182,7 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
             // ── Body Scroll ──────────────────────────────────────────────────────
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                padding: EdgeInsets.fromLTRB(isMobile ? 12 : 20, 16, isMobile ? 12 : 20, 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -2188,7 +2207,7 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
                             ),
                           ),
                           Container(width: 1, height: 28, color: _P.border),
-                          const SizedBox(width: 16),
+                          const SizedBox(width: 14),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2212,20 +2231,16 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
                       const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2)))
                     else if (_catalog.isNotEmpty) ...[
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: EdgeInsets.all(isMobile ? 10 : 12),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: _P.border),
                         ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                // Category dropdown
-                                Expanded(
-                                  flex: 2,
-                                  child: DropdownButtonFormField<String>(
+                        child: isMobile
+                            ? Column(
+                                children: [
+                                  DropdownButtonFormField<String>(
                                     value: _selectedCategory,
                                     decoration: InputDecoration(
                                       labelText: 'Service Category',
@@ -2250,46 +2265,113 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
                                       });
                                     },
                                   ),
-                                ),
-                                const SizedBox(width: 10),
-                                // Item dropdown
-                                Expanded(
-                                  flex: 3,
-                                  child: DropdownButtonFormField<Map<String, dynamic>>(
-                                    value: _selectedCatalogItem,
-                                    decoration: InputDecoration(
-                                      labelText: 'Item / Garment',
-                                      labelStyle: _T.body(12),
-                                      isDense: true,
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: DropdownButtonFormField<Map<String, dynamic>>(
+                                          value: _selectedCatalogItem,
+                                          decoration: InputDecoration(
+                                            labelText: 'Item / Garment',
+                                            labelStyle: _T.body(12),
+                                            isDense: true,
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                          ),
+                                          style: _T.body(13, c: _P.textPrimary),
+                                          isExpanded: true,
+                                          items: categoryItems.map((itm) {
+                                            final name = '${itm['name'] ?? 'Item'}';
+                                            final p = itm['price'] != null ? ' - £${itm['price']}' : '';
+                                            return DropdownMenuItem(value: itm, child: Text('$name$p', overflow: TextOverflow.ellipsis));
+                                          }).toList(),
+                                          onChanged: (itm) => setState(() => _selectedCatalogItem = itm),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      ElevatedButton.icon(
+                                        onPressed: _addFromCatalog,
+                                        icon: const Icon(Icons.add_rounded, size: 16),
+                                        label: const Text('Add'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: _P.azure,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              )
+                            : Row(
+                                children: [
+                                  // Category dropdown
+                                  Expanded(
+                                    flex: 2,
+                                    child: DropdownButtonFormField<String>(
+                                      value: _selectedCategory,
+                                      decoration: InputDecoration(
+                                        labelText: 'Service Category',
+                                        labelStyle: _T.body(12),
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      style: _T.body(13, c: _P.textPrimary),
+                                      isExpanded: true,
+                                      items: _catalog.map((c) {
+                                        final name = '${c['name'] ?? c['title'] ?? 'Category'}';
+                                        return DropdownMenuItem(value: name, child: Text(name));
+                                      }).toList(),
+                                      onChanged: (cat) {
+                                        if (cat == null) return;
+                                        setState(() {
+                                          _selectedCategory = cat;
+                                          final catDoc = _catalog.firstWhere((c) => (c['name'] ?? c['title']) == cat);
+                                          final itms = (catDoc['items'] as List?)?.cast<Map>() ?? [];
+                                          _selectedCatalogItem = itms.isNotEmpty ? Map<String, dynamic>.from(itms.first) : null;
+                                        });
+                                      },
                                     ),
-                                    style: _T.body(13, c: _P.textPrimary),
-                                    isExpanded: true,
-                                    items: categoryItems.map((itm) {
-                                      final name = '${itm['name'] ?? 'Item'}';
-                                      final p = itm['price'] != null ? ' - £${itm['price']}' : '';
-                                      return DropdownMenuItem(value: itm, child: Text('$name$p', overflow: TextOverflow.ellipsis));
-                                    }).toList(),
-                                    onChanged: (itm) => setState(() => _selectedCatalogItem = itm),
                                   ),
-                                ),
-                                const SizedBox(width: 10),
-                                ElevatedButton.icon(
-                                  onPressed: _addFromCatalog,
-                                  icon: const Icon(Icons.add_rounded, size: 16),
-                                  label: const Text('Add'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: _P.azure,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  const SizedBox(width: 10),
+                                  // Item dropdown
+                                  Expanded(
+                                    flex: 3,
+                                    child: DropdownButtonFormField<Map<String, dynamic>>(
+                                      value: _selectedCatalogItem,
+                                      decoration: InputDecoration(
+                                        labelText: 'Item / Garment',
+                                        labelStyle: _T.body(12),
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      style: _T.body(13, c: _P.textPrimary),
+                                      isExpanded: true,
+                                      items: categoryItems.map((itm) {
+                                        final name = '${itm['name'] ?? 'Item'}';
+                                        final p = itm['price'] != null ? ' - £${itm['price']}' : '';
+                                        return DropdownMenuItem(value: itm, child: Text('$name$p', overflow: TextOverflow.ellipsis));
+                                      }).toList(),
+                                      onChanged: (itm) => setState(() => _selectedCatalogItem = itm),
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                                  const SizedBox(width: 10),
+                                  ElevatedButton.icon(
+                                    onPressed: _addFromCatalog,
+                                    icon: const Icon(Icons.add_rounded, size: 16),
+                                    label: const Text('Add'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: _P.azure,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                                ],
+                              ),
                       ),
                     ],
 
@@ -2297,62 +2379,114 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
 
                     // Quick Custom Item Row
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: EdgeInsets.all(isMobile ? 10 : 12),
                       decoration: BoxDecoration(
                         color: _P.canvas,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: _P.border),
                       ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: TextField(
-                              controller: _customNameCtrl,
-                              decoration: InputDecoration(
-                                hintText: 'Custom garment (e.g. Silk Cushion, Leather Jacket)',
-                                hintStyle: _T.body(12, c: _P.textMuted),
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                fillColor: Colors.white,
-                                filled: true,
-                              ),
-                              style: _T.body(13, c: _P.textPrimary),
+                      child: isMobile
+                          ? Column(
+                              children: [
+                                TextField(
+                                  controller: _customNameCtrl,
+                                  decoration: InputDecoration(
+                                    hintText: 'Custom garment (e.g. Silk Cushion, Leather Jacket)',
+                                    hintStyle: _T.body(12, c: _P.textMuted),
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                    fillColor: Colors.white,
+                                    filled: true,
+                                  ),
+                                  style: _T.body(13, c: _P.textPrimary),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _customPriceCtrl,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        decoration: InputDecoration(
+                                          prefixText: '£ ',
+                                          hintText: 'Price (e.g. 15.00)',
+                                          hintStyle: _T.body(12, c: _P.textMuted),
+                                          isDense: true,
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                          fillColor: Colors.white,
+                                          filled: true,
+                                        ),
+                                        style: _T.body(13, c: _P.textPrimary),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    OutlinedButton.icon(
+                                      onPressed: _addCustomItem,
+                                      icon: const Icon(Icons.add_rounded, size: 15),
+                                      label: const Text('Add Custom'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: _P.navy,
+                                        side: const BorderSide(color: _P.border),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: TextField(
+                                    controller: _customNameCtrl,
+                                    decoration: InputDecoration(
+                                      hintText: 'Custom garment (e.g. Silk Cushion, Leather Jacket)',
+                                      hintStyle: _T.body(12, c: _P.textMuted),
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      fillColor: Colors.white,
+                                      filled: true,
+                                    ),
+                                    style: _T.body(13, c: _P.textPrimary),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  flex: 1,
+                                  child: TextField(
+                                    controller: _customPriceCtrl,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    decoration: InputDecoration(
+                                      hintText: '£ Price',
+                                      hintStyle: _T.body(12, c: _P.textMuted),
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      fillColor: Colors.white,
+                                      filled: true,
+                                    ),
+                                    style: _T.body(13, c: _P.textPrimary),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                OutlinedButton.icon(
+                                  onPressed: _addCustomItem,
+                                  icon: const Icon(Icons.add_rounded, size: 15),
+                                  label: const Text('Custom'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: _P.navy,
+                                    side: const BorderSide(color: _P.border),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            flex: 1,
-                            child: TextField(
-                              controller: _customPriceCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: InputDecoration(
-                                hintText: '£ Price',
-                                hintStyle: _T.body(12, c: _P.textMuted),
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                fillColor: Colors.white,
-                                filled: true,
-                              ),
-                              style: _T.body(13, c: _P.textPrimary),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          OutlinedButton.icon(
-                            onPressed: _addCustomItem,
-                            icon: const Icon(Icons.add_rounded, size: 15),
-                            label: const Text('Custom'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: _P.navy,
-                              side: const BorderSide(color: _P.border),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
 
                     const SizedBox(height: 20),
@@ -2392,114 +2526,277 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
                         ),
                       )
                     else
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: _P.border),
-                        ),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _lines.length,
-                          separatorBuilder: (_, __) => Divider(height: 1, color: _P.border),
-                          itemBuilder: (context, index) {
-                            final line = _lines[index];
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    flex: 3,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(line.name, style: _T.heading(13.5, c: _P.textPrimary)),
-                                        const SizedBox(height: 2),
-                                        Text(line.category, style: _T.body(11, c: _P.azure)),
-                                      ],
-                                    ),
-                                  ),
-
-                                  // Unit Price Editable
-                                  SizedBox(
-                                    width: 80,
-                                    child: TextFormField(
-                                      initialValue: line.unitPrice.toStringAsFixed(2),
-                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                      decoration: InputDecoration(
-                                        prefixText: '£',
-                                        isDense: true,
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _lines.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final line = _lines[index];
+                          return Container(
+                            padding: EdgeInsets.all(isMobile ? 12 : 14),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: _P.border),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.02),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: isMobile
+                                ? Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Top row: Item name, Category, Line Total & Delete
+                                      Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  line.name,
+                                                  style: GoogleFonts.plusJakartaSans(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: _P.textPrimary,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 3),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: _P.azureSoft,
+                                                    borderRadius: BorderRadius.circular(6),
+                                                  ),
+                                                  child: Text(
+                                                    line.category,
+                                                    style: GoogleFonts.plusJakartaSans(
+                                                      fontSize: 10.5,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: _P.azure,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.end,
+                                            children: [
+                                              Text(
+                                                '£${line.total.toStringAsFixed(2)}',
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: _P.emerald,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              InkWell(
+                                                onTap: () => setState(() => _lines.removeAt(index)),
+                                                borderRadius: BorderRadius.circular(6),
+                                                child: Padding(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      const Icon(Icons.delete_outline_rounded, size: 14, color: _P.rose),
+                                                      const SizedBox(width: 2),
+                                                      Text('Delete', style: _T.label(10.5, c: _P.rose)),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
                                       ),
-                                      style: _T.label(12, c: _P.textPrimary),
-                                      onChanged: (val) {
-                                        final parsed = _parsePrice(val);
-                                        setState(() => line.unitPrice = parsed);
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
+                                      const SizedBox(height: 8),
+                                      const Divider(height: 1),
+                                      const SizedBox(height: 8),
 
-                                  // Stepper
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: _P.canvas,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: _P.border),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.remove, size: 14),
-                                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                                          padding: EdgeInsets.zero,
-                                          onPressed: () {
-                                            setState(() {
-                                              if (line.qty > 1) {
-                                                line.qty--;
-                                              } else {
-                                                _lines.removeAt(index);
-                                              }
-                                            });
+                                      // Bottom row: Rate & Stepper
+                                      Row(
+                                        children: [
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text('Rate: ', style: _T.body(11.5, c: _P.textMuted)),
+                                              SizedBox(
+                                                width: 72,
+                                                height: 32,
+                                                child: TextFormField(
+                                                  initialValue: line.unitPrice.toStringAsFixed(2),
+                                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                                  decoration: InputDecoration(
+                                                    prefixText: '£',
+                                                    isDense: true,
+                                                    contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                                  ),
+                                                  style: _T.label(12, c: _P.textPrimary),
+                                                  onChanged: (val) {
+                                                    final parsed = _parsePrice(val);
+                                                    setState(() => line.unitPrice = parsed);
+                                                  },
+                                                ),
+                                              ),
+                                              Text(' each', style: _T.body(11, c: _P.textMuted)),
+                                            ],
+                                          ),
+                                          const Spacer(),
+
+                                          // Stepper
+                                          Container(
+                                            height: 32,
+                                            decoration: BoxDecoration(
+                                              color: _P.canvas,
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(color: _P.border),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                IconButton(
+                                                  icon: const Icon(Icons.remove, size: 14),
+                                                  constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                                                  padding: EdgeInsets.zero,
+                                                  splashRadius: 16,
+                                                  onPressed: () {
+                                                    setState(() {
+                                                      if (line.qty > 1) {
+                                                        line.qty--;
+                                                      } else {
+                                                        _lines.removeAt(index);
+                                                      }
+                                                    });
+                                                  },
+                                                ),
+                                                Container(
+                                                  constraints: const BoxConstraints(minWidth: 26),
+                                                  alignment: Alignment.center,
+                                                  child: Text(
+                                                    '${line.qty}',
+                                                    style: GoogleFonts.plusJakartaSans(
+                                                      fontSize: 13,
+                                                      fontWeight: FontWeight.w700,
+                                                      color: _P.textPrimary,
+                                                    ),
+                                                  ),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(Icons.add, size: 14),
+                                                  constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                                                  padding: EdgeInsets.zero,
+                                                  splashRadius: 16,
+                                                  onPressed: () => setState(() => line.qty++),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  )
+                                : Row(
+                                    children: [
+                                      Expanded(
+                                        flex: 3,
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(line.name, style: _T.heading(13.5, c: _P.textPrimary)),
+                                            const SizedBox(height: 2),
+                                            Text(line.category, style: _T.body(11, c: _P.azure)),
+                                          ],
+                                        ),
+                                      ),
+
+                                      // Unit Price Editable
+                                      SizedBox(
+                                        width: 80,
+                                        child: TextFormField(
+                                          initialValue: line.unitPrice.toStringAsFixed(2),
+                                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                          decoration: InputDecoration(
+                                            prefixText: '£',
+                                            isDense: true,
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                          ),
+                                          style: _T.label(12, c: _P.textPrimary),
+                                          onChanged: (val) {
+                                            final parsed = _parsePrice(val);
+                                            setState(() => line.unitPrice = parsed);
                                           },
                                         ),
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                                          child: Text('${line.qty}', style: _T.heading(13)),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.add, size: 14),
-                                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                                          padding: EdgeInsets.zero,
-                                          onPressed: () => setState(() => line.qty++),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 14),
+                                      ),
+                                      const SizedBox(width: 12),
 
-                                  // Line Total
-                                  SizedBox(
-                                    width: 60,
-                                    child: Text(
-                                      '£${line.total.toStringAsFixed(2)}',
-                                      textAlign: TextAlign.right,
-                                      style: _T.heading(13.5, c: _P.emerald),
-                                    ),
-                                  ),
+                                      // Stepper
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          color: _P.canvas,
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: _P.border),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(Icons.remove, size: 14),
+                                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                              padding: EdgeInsets.zero,
+                                              onPressed: () {
+                                                setState(() {
+                                                  if (line.qty > 1) {
+                                                    line.qty--;
+                                                  } else {
+                                                    _lines.removeAt(index);
+                                                  }
+                                                });
+                                              },
+                                            ),
+                                            Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6),
+                                              child: Text('${line.qty}', style: _T.heading(13)),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.add, size: 14),
+                                              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                              padding: EdgeInsets.zero,
+                                              onPressed: () => setState(() => line.qty++),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 14),
 
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline_rounded, size: 18, color: _P.rose),
-                                    onPressed: () => setState(() => _lines.removeAt(index)),
+                                      // Line Total
+                                      SizedBox(
+                                        width: 60,
+                                        child: Text(
+                                          '£${line.total.toStringAsFixed(2)}',
+                                          textAlign: TextAlign.right,
+                                          style: _T.heading(13.5, c: _P.emerald),
+                                        ),
+                                      ),
+
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline_rounded, size: 18, color: _P.rose),
+                                        onPressed: () => setState(() => _lines.removeAt(index)),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
+                          );
+                        },
                       ),
 
                     const SizedBox(height: 18),
@@ -2597,31 +2894,36 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
 
             // ── Footer ──────────────────────────────────────────────────────────
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: isMobile ? 10 : 14),
               decoration: BoxDecoration(
                 color: _P.canvas,
                 border: Border(top: BorderSide(color: _P.border)),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   TextButton(
                     onPressed: _saving ? null : () => Navigator.of(context).pop(),
                     child: Text('Cancel', style: _T.label(13, c: _P.textSecondary)),
                   ),
-                  ElevatedButton.icon(
-                    onPressed: _saving ? null : _saveAndSync,
-                    icon: _saving
-                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.check_circle_rounded, size: 16),
-                    label: Text(_saving ? 'Saving & Notifying...' : 'Save & Update Bill (£${_totalPrice.toStringAsFixed(2)})'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _P.azure,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      textStyle: _T.label(13, c: Colors.white),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _saving ? null : _saveAndSync,
+                      icon: _saving
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.check_circle_rounded, size: 16),
+                      label: Text(
+                        _saving ? 'Saving...' : 'Save & Update Bill (£${_totalPrice.toStringAsFixed(2)})',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _P.azure,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: 12),
+                        textStyle: _T.label(isMobile ? 12.5 : 13, c: Colors.white),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
                     ),
                   ),
                 ],
