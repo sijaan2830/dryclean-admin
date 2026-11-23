@@ -483,6 +483,15 @@ class _LiveBadgeState extends State<_LiveBadge>
   }
 }
 
+// ─── Price Helper ─────────────────────────────────────────────────────────────
+
+double _parsePrice(dynamic v) {
+  if (v is num) return v.toDouble();
+  if (v == null) return 0.0;
+  final cleaned = v.toString().replaceAll('£', '').replaceAll(',', '').trim();
+  return double.tryParse(cleaned) ?? 0.0;
+}
+
 // ─── Order Card ───────────────────────────────────────────────────────────────
 
 class OrderCard extends StatefulWidget {
