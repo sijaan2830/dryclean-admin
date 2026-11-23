@@ -141,7 +141,6 @@ ThemeData buildAdminTheme() {
       backgroundColor: AC.ink,
       contentTextStyle: AC.t(14, c: Colors.white, w: FontWeight.w600),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      width: 460,
     ),
     tooltipTheme: TooltipThemeData(decoration: BoxDecoration(color: AC.ink, borderRadius: BorderRadius.circular(8)), textStyle: AC.t(12, c: Colors.white, w: FontWeight.w600)),
     switchTheme: SwitchThemeData(

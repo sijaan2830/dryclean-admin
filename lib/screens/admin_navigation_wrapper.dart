@@ -331,40 +331,59 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final narrow = MediaQuery.sizeOf(context).width < 640;
+    final w = MediaQuery.sizeOf(context).width;
+    final narrow = w < 640;
+    final isPhone = w < 480;
     return Container(
       height: 64,
-      padding: EdgeInsets.symmetric(horizontal: desktop ? 28 : 10),
+      padding: EdgeInsets.symmetric(horizontal: desktop ? 28 : (isPhone ? 8 : 14)),
       decoration: const BoxDecoration(color: AC.surface, border: Border(bottom: BorderSide(color: AC.border))),
       child: Row(children: [
-        if (!desktop) IconButton(onPressed: onMenu, icon: const Icon(Icons.menu_rounded)),
+        if (!desktop)
+          IconButton(
+            onPressed: onMenu,
+            icon: const Icon(Icons.menu_rounded),
+            padding: isPhone ? EdgeInsets.zero : const EdgeInsets.all(8),
+            constraints: isPhone ? const BoxConstraints(minWidth: 36, minHeight: 36) : null,
+          ),
+        if (!desktop && isPhone) const SizedBox(width: 4),
         Expanded(
           child: Row(children: [
             if (!narrow) ...[
               Text(item.group, style: AC.t(14, c: AC.mut, w: FontWeight.w600)),
               const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Icon(Icons.chevron_right_rounded, size: 18, color: AC.faint)),
             ],
-            Flexible(child: Text(item.label, overflow: TextOverflow.ellipsis, style: AC.t(14.5, w: FontWeight.w800))),
+            Flexible(child: Text(item.label, overflow: TextOverflow.ellipsis, style: AC.t(isPhone ? 14 : 14.5, w: FontWeight.w800))),
           ]),
         ),
         if (!bookingsOpen)
           Padding(
-            padding: const EdgeInsets.only(right: 10),
+            padding: EdgeInsets.only(right: isPhone ? 6 : 10),
             child: Tooltip(
               message: 'New bookings are paused on the website',
-              child: InkWell(onTap: onWebsite, borderRadius: BorderRadius.circular(99), child: const StatusPill('Bookings paused', c: AC.danger, bg: AC.dangerBg, icon: Icons.pause_circle_rounded)),
+              child: InkWell(
+                onTap: onWebsite,
+                borderRadius: BorderRadius.circular(99),
+                child: isPhone
+                    ? Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(color: AC.dangerBg, shape: BoxShape.circle, border: Border.all(color: const Color(0xFFFECACA))),
+                        child: const Icon(Icons.pause_rounded, size: 14, color: AC.danger),
+                      )
+                    : const StatusPill('Bookings paused', c: AC.danger, bg: AC.dangerBg, icon: Icons.pause_circle_rounded),
+              ),
             ),
           ),
         InkWell(
           onTap: onAttention,
           borderRadius: BorderRadius.circular(99),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            padding: EdgeInsets.symmetric(horizontal: isPhone ? 8 : 12, vertical: isPhone ? 5 : 7),
             decoration: BoxDecoration(color: attention > 0 ? AC.warningBg : AC.mint, borderRadius: BorderRadius.circular(99), border: Border.all(color: attention > 0 ? const Color(0xFFFDE68A) : AC.mint2)),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Container(width: 8, height: 8, decoration: BoxDecoration(color: attention > 0 ? AC.warning : AC.emerald, shape: BoxShape.circle)),
-              const SizedBox(width: 7),
-              Text(attention > 0 ? (narrow ? '$attention' : '$attention need action') : (narrow ? 'Live' : 'All caught up'), style: AC.t(12.5, c: attention > 0 ? AC.warning : AC.emerald7, w: FontWeight.w800)),
+              Container(width: isPhone ? 6 : 8, height: isPhone ? 6 : 8, decoration: BoxDecoration(color: attention > 0 ? AC.warning : AC.emerald, shape: BoxShape.circle)),
+              SizedBox(width: isPhone ? 5 : 7),
+              Text(attention > 0 ? (narrow ? '$attention' : '$attention need action') : (narrow ? 'Live' : 'All caught up'), style: AC.t(isPhone ? 11.5 : 12.5, c: attention > 0 ? AC.warning : AC.emerald7, w: FontWeight.w800)),
             ]),
           ),
         ),
@@ -381,7 +400,7 @@ class _TopBar extends StatelessWidget {
             style: OutlinedButton.styleFrom(minimumSize: const Size(0, 38)),
           ),
         ],
-        const SizedBox(width: 8),
+        SizedBox(width: isPhone ? 6 : 8),
         PopupMenuButton<String>(
           tooltip: 'Account',
           offset: const Offset(0, 48),
@@ -395,7 +414,7 @@ class _TopBar extends StatelessWidget {
             const PopupMenuItem(value: 'site', child: ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Icon(Icons.language_rounded), title: Text('Website settings'))),
             const PopupMenuItem(value: 'out', child: ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Icon(Icons.logout_rounded, color: AC.danger), title: Text('Sign out'))),
           ],
-          child: CircleAvatar(radius: 17, backgroundColor: AC.forest, child: Text(email.isEmpty ? 'A' : email[0].toUpperCase(), style: AC.h(14, c: AC.gold))),
+          child: CircleAvatar(radius: isPhone ? 15 : 17, backgroundColor: AC.forest, child: Text(email.isEmpty ? 'A' : email[0].toUpperCase(), style: AC.h(isPhone ? 12 : 14, c: AC.gold))),
         ),
       ]),
     );

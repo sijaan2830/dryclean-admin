@@ -261,37 +261,42 @@ class _LiveStrip extends StatelessWidget {
   const _LiveStrip({required this.drivers, required this.notices, required this.users});
   @override
   Widget build(BuildContext context) {
-    Widget tile(IconData i, String v, String l, Color c, String page) => Expanded(
-          child: InkWell(
-            onTap: () => openAdminPage(page),
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: AC.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: AC.border)),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Icon(i, size: 20, color: c),
-                const SizedBox(height: 10),
-                Text(v, style: AC.num(20)),
-                Text(l, style: AC.t(12, c: AC.mut, w: FontWeight.w600)),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isSmall = constraints.maxWidth < 480;
+        Widget tile(IconData i, String v, String l, Color c, String page) => Expanded(
+              child: InkWell(
+                onTap: () => openAdminPage(page),
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: EdgeInsets.all(isSmall ? 10 : 14),
+                  decoration: BoxDecoration(color: AC.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: AC.border)),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Icon(i, size: isSmall ? 18 : 20, color: c),
+                    SizedBox(height: isSmall ? 6 : 10),
+                    Text(v, style: AC.num(isSmall ? 17 : 20)),
+                    Text(l, maxLines: 1, overflow: TextOverflow.ellipsis, style: AC.t(isSmall ? 10.5 : 12, c: AC.mut, w: FontWeight.w600)),
+                  ]),
+                ),
+              ),
+            );
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: drivers,
+          builder: (context, d) => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: notices,
+            builder: (context, n) => FutureBuilder<AggregateQuerySnapshot>(
+              future: users,
+              builder: (context, u) => Row(children: [
+                tile(Icons.local_shipping_rounded, '${d.data?.size ?? 0}', 'Drivers online', AC.info, 'Dispatch'),
+                SizedBox(width: isSmall ? 6 : 10),
+                tile(Icons.campaign_rounded, '${n.data?.size ?? 0}', 'Live notices', AC.warning, 'Notices'),
+                SizedBox(width: isSmall ? 6 : 10),
+                tile(Icons.people_rounded, '${u.data?.count ?? '—'}', 'Customers', AC.emerald, 'Customers'),
               ]),
             ),
           ),
         );
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: drivers,
-      builder: (context, d) => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: notices,
-        builder: (context, n) => FutureBuilder<AggregateQuerySnapshot>(
-          future: users,
-          builder: (context, u) => Row(children: [
-            tile(Icons.local_shipping_rounded, '${d.data?.size ?? 0}', 'Drivers online', AC.info, 'Dispatch'),
-            const SizedBox(width: 10),
-            tile(Icons.campaign_rounded, '${n.data?.size ?? 0}', 'Live notices', AC.warning, 'Notices'),
-            const SizedBox(width: 10),
-            tile(Icons.people_rounded, '${u.data?.count ?? '—'}', 'Customers', AC.emerald, 'Customers'),
-          ]),
-        ),
-      ),
+      },
     );
   }
 }

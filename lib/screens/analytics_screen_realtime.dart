@@ -34,26 +34,29 @@ class _AnalyticsScreenRealtimeState extends State<AnalyticsScreenRealtime>
         children: [
           // Header
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: const BoxDecoration(
               color: Colors.white,
               border: Border(bottom: BorderSide(color: Colors.grey, width: 0.5)),
             ),
             child: Row(
               children: [
-                Icon(Icons.analytics, color: Colors.purple[700], size: 28),
-                const SizedBox(width: 12),
-                Text(
-                  'Analytics Dashboard',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                Icon(Icons.analytics, color: Colors.purple[700], size: 26),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Analytics Dashboard',
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: MediaQuery.sizeOf(context).width < 500 ? 18 : 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
                     color: Colors.purple[50],
                     borderRadius: BorderRadius.circular(20),
@@ -63,18 +66,18 @@ class _AnalyticsScreenRealtimeState extends State<AnalyticsScreenRealtime>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        width: 8,
-                        height: 8,
+                        width: 7,
+                        height: 7,
                         decoration: const BoxDecoration(
                           color: Colors.purple,
                           shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 5),
                       Text(
-                        'Real-time',
+                        'Live',
                         style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
+                          fontSize: 11.5,
                           color: Colors.purple[700],
                           fontWeight: FontWeight.w600,
                         ),

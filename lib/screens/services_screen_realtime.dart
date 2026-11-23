@@ -328,39 +328,74 @@ class _SectionDetail extends StatelessWidget {
       groups.putIfAbsent('${it['category'] ?? ''}'.isEmpty ? 'Other' : '${it['category']}', () => []).add(i);
     }
     final active = m['isActive'] != false;
+    final narrow = MediaQuery.sizeOf(context).width < 600;
     return SurfaceCard(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+      padding: EdgeInsets.fromLTRB(narrow ? 14 : 20, 16, narrow ? 14 : 20, 18),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Tooltip(message: 'Change icon & colour', child: InkWell(onTap: onEditSection, borderRadius: BorderRadius.circular(18), child: serviceIcon(iconKeyOf(m), size: 58, bg: cardColorsOf(m).$1))),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('${m['name'] ?? doc.id}', style: AC.h(20)),
-              if ('${m['description'] ?? ''}'.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('${m['description']}', style: AC.t(13.5, c: AC.mut))),
-            ]),
-          ),
-          Tooltip(
-            message: active ? 'Shown to customers' : 'Hidden from customers',
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Text(active ? 'Visible' : 'Hidden', style: AC.t(13, c: active ? AC.emerald7 : AC.mut, w: FontWeight.w700)),
-              Switch(value: active, onChanged: (v) => doc.reference.update({'isActive': v, 'updatedAt': FieldValue.serverTimestamp()})),
-            ]),
-          ),
-          PopupMenuButton<String>(
-            onSelected: (v) => v == 'edit' ? onEditSection() : onDeleteSection(),
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'edit', child: ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Icon(Icons.edit_outlined), title: Text('Edit section'))),
-              PopupMenuItem(value: 'del', child: ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Icon(Icons.delete_outline_rounded, color: AC.danger), title: Text('Delete section'))),
-            ],
-          ),
-        ]),
-        const SizedBox(height: 16),
-        Row(children: [
-          Expanded(child: TextField(onChanged: onQuery, decoration: const InputDecoration(hintText: 'Search items', prefixIcon: Icon(Icons.search_rounded, size: 20)))),
-          const SizedBox(width: 10),
-          FilledButton.icon(onPressed: onAdd, icon: const Icon(Icons.add_rounded, size: 19), label: const Text('Add item')),
-        ]),
+        if (narrow) ...[
+          Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            Tooltip(message: 'Change icon & colour', child: InkWell(onTap: onEditSection, borderRadius: BorderRadius.circular(14), child: serviceIcon(iconKeyOf(m), size: 44, bg: cardColorsOf(m).$1))),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${m['name'] ?? doc.id}', style: AC.h(18)),
+                if ('${m['description'] ?? ''}'.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text('${m['description']}', maxLines: 2, overflow: TextOverflow.ellipsis, style: AC.t(12.5, c: AC.mut))),
+              ]),
+            ),
+            PopupMenuButton<String>(
+              onSelected: (v) => v == 'edit' ? onEditSection() : onDeleteSection(),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'edit', child: ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Icon(Icons.edit_outlined), title: Text('Edit section'))),
+                PopupMenuItem(value: 'del', child: ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Icon(Icons.delete_outline_rounded, color: AC.danger), title: Text('Delete section'))),
+              ],
+            ),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
+            const Spacer(),
+            Text(active ? 'Visible' : 'Hidden', style: AC.t(12.5, c: active ? AC.emerald7 : AC.mut, w: FontWeight.w700)),
+            const SizedBox(width: 6),
+            Switch(value: active, onChanged: (v) => doc.reference.update({'isActive': v, 'updatedAt': FieldValue.serverTimestamp()})),
+          ]),
+        ] else ...[
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Tooltip(message: 'Change icon & colour', child: InkWell(onTap: onEditSection, borderRadius: BorderRadius.circular(18), child: serviceIcon(iconKeyOf(m), size: 58, bg: cardColorsOf(m).$1))),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${m['name'] ?? doc.id}', style: AC.h(20)),
+                if ('${m['description'] ?? ''}'.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('${m['description']}', style: AC.t(13.5, c: AC.mut))),
+              ]),
+            ),
+            Tooltip(
+              message: active ? 'Shown to customers' : 'Hidden from customers',
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(active ? 'Visible' : 'Hidden', style: AC.t(13, c: active ? AC.emerald7 : AC.mut, w: FontWeight.w700)),
+                Switch(value: active, onChanged: (v) => doc.reference.update({'isActive': v, 'updatedAt': FieldValue.serverTimestamp()})),
+              ]),
+            ),
+            PopupMenuButton<String>(
+              onSelected: (v) => v == 'edit' ? onEditSection() : onDeleteSection(),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'edit', child: ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Icon(Icons.edit_outlined), title: Text('Edit section'))),
+                PopupMenuItem(value: 'del', child: ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: Icon(Icons.delete_outline_rounded, color: AC.danger), title: Text('Delete section'))),
+              ],
+            ),
+          ]),
+        ],
+        const SizedBox(height: 14),
+        if (narrow)
+          Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            TextField(onChanged: onQuery, decoration: const InputDecoration(hintText: 'Search items', prefixIcon: Icon(Icons.search_rounded, size: 20))),
+            const SizedBox(height: 10),
+            FilledButton.icon(onPressed: onAdd, icon: const Icon(Icons.add_rounded, size: 19), label: const Text('Add item')),
+          ])
+        else
+          Row(children: [
+            Expanded(child: TextField(onChanged: onQuery, decoration: const InputDecoration(hintText: 'Search items', prefixIcon: Icon(Icons.search_rounded, size: 20)))),
+            const SizedBox(width: 10),
+            FilledButton.icon(onPressed: onAdd, icon: const Icon(Icons.add_rounded, size: 19), label: const Text('Add item')),
+          ]),
         const SizedBox(height: 14),
         if (items.isEmpty)
           EmptyState(icon: Icons.playlist_add_rounded, title: 'No items yet', text: 'Add the first item and price for this section.', action: FilledButton(onPressed: onAdd, child: const Text('Add item')))

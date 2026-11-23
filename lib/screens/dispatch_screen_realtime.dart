@@ -208,11 +208,13 @@ class _DispatchScreenRealtimeState extends State<DispatchScreenRealtime> with Si
         final online = drivers.where((d) => _isOnline(fleet[d.id])).length;
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            padding: EdgeInsets.fromLTRB(wide ? 20 : 12, 16, wide ? 20 : 12, 0),
             child: LayoutBuilder(builder: (context, c) {
+              final isSmall = c.maxWidth < 460;
               final cols = c.maxWidth >= 620 ? 4 : 2;
-              final w = (c.maxWidth - (cols - 1) * 12) / cols;
-              return Wrap(spacing: 12, runSpacing: 12, children: [
+              final spacing = isSmall ? 8.0 : 12.0;
+              final w = (c.maxWidth - (cols - 1) * spacing) / cols;
+              return Wrap(spacing: spacing, runSpacing: spacing, children: [
                 SizedBox(width: w, child: _Kpi(Icons.inbox_rounded, '${collect.length}', 'To collect', _D.amber, _D.amberBg)),
                 SizedBox(width: w, child: _Kpi(Icons.local_shipping_rounded, '${deliver.length}', 'To deliver', _D.emerald, _D.emeraldBg)),
                 SizedBox(width: w, child: _Kpi(Icons.route_rounded, '${jobs.where((j) => j.data()['status'] != 'completed' && j.data()['status'] != 'failed').length}', 'Open jobs', _D.azure, _D.azureSoft)),
@@ -418,15 +420,21 @@ class _Kpi extends StatelessWidget {
   final Color c, bg;
   const _Kpi(this.icon, this.value, this.label, this.c, this.bg);
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: _D.card, borderRadius: BorderRadius.circular(16), border: Border.all(color: _D.border)),
-        child: Row(children: [
-          Container(width: 40, height: 40, decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: c, size: 21)),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(value, style: _D.h(20)), Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _D.t(12, c: _D.mut))])),
-        ]),
-      );
+  Widget build(BuildContext context) {
+    final narrow = MediaQuery.sizeOf(context).width < 460;
+    return Container(
+      padding: EdgeInsets.all(narrow ? 10 : 14),
+      decoration: BoxDecoration(color: _D.card, borderRadius: BorderRadius.circular(16), border: Border.all(color: _D.border)),
+      child: Row(children: [
+        Container(width: narrow ? 34 : 40, height: narrow ? 34 : 40, decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(narrow ? 10 : 12)), child: Icon(icon, color: c, size: narrow ? 18 : 21)),
+        SizedBox(width: narrow ? 8 : 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(value, style: _D.h(narrow ? 17 : 20)),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _D.t(narrow ? 11 : 12, c: _D.mut)),
+        ])),
+      ]),
+    );
+  }
 }
 
 class _Empty extends StatelessWidget {
@@ -478,8 +486,9 @@ class _OrderQueue extends StatelessWidget {
           pickup ? 'New bookings from the website and app appear here instantly.' : 'Orders marked “Ready” in the intake app appear here.');
     }
     final list = [...orders]..sort((a, b) => (_date(a.data()['createdAt']) ?? DateTime(2000)).compareTo(_date(b.data()['createdAt']) ?? DateTime(2000)));
+    final isMobile = MediaQuery.sizeOf(context).width < 540;
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      padding: EdgeInsets.fromLTRB(isMobile ? 12 : 20, 16, isMobile ? 12 : 20, 24),
       itemCount: list.length,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, i) {
@@ -489,6 +498,52 @@ class _OrderQueue extends StatelessWidget {
         final failed = _s(o['status']).endsWith('_failed');
         final day = _s(pickup ? b['collectionDate'] : b['deliveryDate']);
         final time = _s(pickup ? b['collectionTime'] : b['deliveryTime']);
+        final assignBtn = FilledButton.icon(
+          onPressed: () => onAssign(list[i], type),
+          icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
+          label: const Text('Assign'),
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF073B1B),
+            padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: isMobile ? 10 : 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+
+        if (isMobile) {
+          return Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: _D.card, borderRadius: BorderRadius.circular(16), border: Border.all(color: failed ? const Color(0xFFFECDD3) : _D.border)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(color: pickup ? _D.amberBg : _D.emeraldBg, borderRadius: BorderRadius.circular(10)),
+                  child: Icon(pickup ? Icons.north_east_rounded : Icons.south_west_rounded, color: pickup ? _D.amber : _D.emerald, size: 18),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                    Text('#${_s(o['orderId'])}', style: _D.t(12, c: _D.mut, w: FontWeight.w700)),
+                    if (failed) _Pill(pickup ? 'Collection failed' : 'Delivery failed', _D.rose, _D.roseBg),
+                    if (_s(o['source']) == 'website') _Pill('Website', _D.azure, _D.azureSoft),
+                  ]),
+                ),
+                assignBtn,
+              ]),
+              const SizedBox(height: 8),
+              Text('${_s(b['firstName'])} ${_s(b['lastName'])}'.trim().isEmpty ? 'Customer' : '${_s(b['firstName'])} ${_s(b['lastName'])}'.trim(), style: _D.t(14.5, w: FontWeight.w800)),
+              Text([_s(addr['line1']), _s(addr['postalCode'])].where((e) => e.isNotEmpty).join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis, style: _D.t(12, c: _D.mut)),
+              const SizedBox(height: 5),
+              Row(children: [
+                const Icon(Icons.schedule_rounded, size: 14, color: _D.faint),
+                const SizedBox(width: 5),
+                Flexible(child: Text([day, time].where((e) => e.isNotEmpty).join(' · ').ifEmpty('Any time'), style: _D.t(12, w: FontWeight.w700))),
+              ]),
+            ]),
+          );
+        }
+
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(color: _D.card, borderRadius: BorderRadius.circular(16), border: Border.all(color: failed ? const Color(0xFFFECDD3) : _D.border)),
@@ -519,12 +574,7 @@ class _OrderQueue extends StatelessWidget {
               ]),
             ),
             const SizedBox(width: 10),
-            FilledButton.icon(
-              onPressed: () => onAssign(list[i], type),
-              icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
-              label: const Text('Assign'),
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF073B1B), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-            ),
+            assignBtn,
           ]),
         );
       },

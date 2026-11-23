@@ -178,7 +178,7 @@ class _OrdersScreenRealtimeState extends State<OrdersScreenRealtime>
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+        padding: EdgeInsets.fromLTRB(Responsive.isMobile(context) ? 14 : 24, 16, Responsive.isMobile(context) ? 14 : 24, 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -787,15 +787,15 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 Text('#${widget.order['orderId']}',
                                     style: _T.heading(15)),
-                                if (isPrepaid) ...[
-                                  const SizedBox(width: 8),
+                                if (isPrepaid)
                                   _Chip(label: 'PREPAID', color: _P.violet, bg: _P.violetBg),
-                                ],
-                                const SizedBox(width: 8),
                                 _StatusBadge(status: status),
                               ],
                             ),
@@ -1018,10 +1018,13 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
           // Items Header
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-            child: Row(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text('ORDER ITEMS & SERVICES', style: _T.label(12, c: _P.textMuted).copyWith(letterSpacing: 0.8)),
-                const Spacer(),
                 Text(orderTypeLabel, style: _T.label(11, c: _P.azure)),
               ],
             ),
