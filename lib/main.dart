@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -10,9 +11,23 @@ import 'theme/admin_ui.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint('[AdminPanel] FlutterError: ${details.exception}');
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('[AdminPanel] PlatformDispatcher error: $error');
+    return true; // Handled, prevents mobile crashes
+  };
+
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('[AdminPanel] Firebase init error: $e');
+  }
   runApp(const AdminPanelApp());
 }
 

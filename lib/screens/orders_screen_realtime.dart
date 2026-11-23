@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -1025,7 +1026,27 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text('ORDER ITEMS & SERVICES', style: _T.label(12, c: _P.textMuted).copyWith(letterSpacing: 0.8)),
-                Text(orderTypeLabel, style: _T.label(11, c: _P.azure)),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(orderTypeLabel, style: _T.label(11, c: _P.azure)),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => _openItemizeModal(context, widget.order, bookingData),
+                      icon: const Icon(Icons.edit_note_rounded, size: 14),
+                      label: Text(items.isEmpty ? 'Count & Set Price' : 'Edit Items', style: _T.label(11, c: Colors.white)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _P.azure,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -1033,6 +1054,21 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
 
           if (items.isNotEmpty) ...[
             ...items.map((item) => _ItemRow(item: item)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
+              child: OutlinedButton.icon(
+                onPressed: () => _openItemizeModal(context, widget.order, bookingData),
+                icon: const Icon(Icons.edit_note_rounded, size: 14, color: _P.azure),
+                label: const Text('Add / Modify Items & Price'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _P.azure,
+                  side: const BorderSide(color: _P.azure),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  textStyle: _T.label(11.5, c: _P.azure),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
           ] else ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
@@ -1062,6 +1098,20 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                     Text(
                       'Items will be counted, inspected & priced at the facility upon collection.',
                       style: _T.body(12, c: _P.textMuted),
+                    ),
+                    const SizedBox(height: 10),
+                    ElevatedButton.icon(
+                      onPressed: () => _openItemizeModal(context, widget.order, bookingData),
+                      icon: const Icon(Icons.add_shopping_cart_rounded, size: 15),
+                      label: const Text('Count / Itemize Bag & Set Price'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _P.azure,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        textStyle: _T.label(12, c: Colors.white),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
                     ),
                   ],
                 ),
@@ -1482,6 +1532,17 @@ Generated on: ${DateTime.now().toString()}
       ),
     );
   }
+
+  void _openItemizeModal(BuildContext context, Map<String, dynamic> order, Map<String, dynamic> bookingData) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _ItemizeOrderDialog(
+        order: order,
+        bookingData: bookingData,
+      ),
+    );
+  }
 }
 
 // ─── Small Widgets ────────────────────────────────────────────────────────────
@@ -1701,6 +1762,873 @@ class _DetailRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Itemize Order & Live Price Modal ────────────────────────────────────────
+
+class _ItemizeOrderDialog extends StatefulWidget {
+  final Map<String, dynamic> order;
+  final Map<String, dynamic> bookingData;
+
+  const _ItemizeOrderDialog({
+    required this.order,
+    required this.bookingData,
+  });
+
+  @override
+  State<_ItemizeOrderDialog> createState() => _ItemizeOrderDialogState();
+}
+
+class _EditableLine {
+  String id;
+  String category;
+  String name;
+  double unitPrice;
+  int qty;
+
+  _EditableLine({
+    required this.id,
+    required this.category,
+    required this.name,
+    required this.unitPrice,
+    this.qty = 1,
+  });
+
+  double get total => unitPrice * qty;
+}
+
+class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
+  final List<_EditableLine> _lines = [];
+  List<Map<String, dynamic>> _catalog = [];
+  bool _loadingCatalog = true;
+  bool _saving = false;
+
+  String? _selectedCategory;
+  Map<String, dynamic>? _selectedCatalogItem;
+
+  final _customNameCtrl = TextEditingController();
+  final _customPriceCtrl = TextEditingController();
+  final _customCatCtrl = TextEditingController(text: 'General');
+  final _notesCtrl = TextEditingController();
+
+  late String _targetStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    final currentStatus = widget.order['status'] ?? 'pending';
+    _targetStatus = (currentStatus == 'at_facility' || currentStatus == 'inspecting' || currentStatus == 'collected')
+        ? 'awaiting_approval'
+        : currentStatus;
+
+    _initExistingItems();
+    _loadCatalog();
+  }
+
+  @override
+  void dispose() {
+    _customNameCtrl.dispose();
+    _customPriceCtrl.dispose();
+    _customCatCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  void _initExistingItems() {
+    final raw = widget.bookingData['selectedItems'] ?? widget.order['selectedItems'] ?? widget.order['items'] ?? widget.bookingData['items'];
+    if (raw is Map) {
+      raw.forEach((key, val) {
+        if (val is Map) {
+          final cat = (val['category'] ?? 'General').toString().trim();
+          final name = (val['itemType'] ?? val['name'] ?? val['title'] ?? 'Item').toString().trim();
+          final p = _parsePrice(val['price'] ?? val['unitPrice']);
+          final int qty = (val['quantity'] as num?)?.toInt() ?? (val['qty'] as num?)?.toInt() ?? 1;
+
+          final match = _lines.where((l) => l.name.toLowerCase() == name.toLowerCase() && l.category.toLowerCase() == cat.toLowerCase());
+          if (match.isNotEmpty) {
+            match.first.qty += qty;
+          } else {
+            _lines.add(_EditableLine(
+              id: UniqueKey().toString(),
+              category: cat.isEmpty ? 'General' : cat,
+              name: name.isEmpty ? 'Item' : name,
+              unitPrice: p,
+              qty: qty,
+            ));
+          }
+        }
+      });
+    } else if (raw is List) {
+      for (final val in raw) {
+        if (val is Map) {
+          final cat = (val['category'] ?? 'General').toString().trim();
+          final name = (val['itemType'] ?? val['name'] ?? val['title'] ?? 'Item').toString().trim();
+          final p = _parsePrice(val['price'] ?? val['unitPrice']);
+          final int qty = (val['qty'] as num?)?.toInt() ?? (val['quantity'] as num?)?.toInt() ?? 1;
+          _lines.add(_EditableLine(
+            id: UniqueKey().toString(),
+            category: cat.isEmpty ? 'General' : cat,
+            name: name.isEmpty ? 'Item' : name,
+            unitPrice: p,
+            qty: qty,
+          ));
+        }
+      }
+    }
+  }
+
+  double _parsePrice(dynamic v) {
+    if (v is num) return v.toDouble();
+    if (v == null) return 0.0;
+    final cleaned = v.toString().replaceAll('£', '').replaceAll(',', '').trim();
+    return double.tryParse(cleaned) ?? 0.0;
+  }
+
+  Future<void> _loadCatalog() async {
+    try {
+      final snap = await FirebaseFirestore.instance.collection('services').orderBy('order').get();
+      if (!mounted) return;
+      final docs = snap.docs.map((d) {
+        final m = Map<String, dynamic>.from(d.data());
+        m['id'] = d.id;
+        return m;
+      }).where((m) => m['isActive'] != false).toList();
+
+      setState(() {
+        _catalog = docs;
+        _loadingCatalog = false;
+        if (docs.isNotEmpty) {
+          _selectedCategory = docs.first['name'] ?? docs.first['title'] ?? '';
+          final items = (docs.first['items'] as List?)?.cast<Map>() ?? [];
+          if (items.isNotEmpty) {
+            _selectedCatalogItem = Map<String, dynamic>.from(items.first);
+          }
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingCatalog = false);
+    }
+  }
+
+  void _addFromCatalog() {
+    if (_selectedCatalogItem == null) return;
+    final name = '${_selectedCatalogItem!['name'] ?? 'Item'}'.trim();
+    final cat = '${_selectedCategory ?? 'General'}'.trim();
+    final price = _parsePrice(_selectedCatalogItem!['price']);
+
+    final existing = _lines.where((l) => l.name.toLowerCase() == name.toLowerCase() && l.category.toLowerCase() == cat.toLowerCase());
+    setState(() {
+      if (existing.isNotEmpty) {
+        existing.first.qty++;
+      } else {
+        _lines.add(_EditableLine(
+          id: UniqueKey().toString(),
+          category: cat,
+          name: name,
+          unitPrice: price,
+          qty: 1,
+        ));
+      }
+    });
+  }
+
+  void _addCustomItem() {
+    final name = _customNameCtrl.text.trim();
+    final price = _parsePrice(_customPriceCtrl.text);
+    final cat = _customCatCtrl.text.trim().isEmpty ? 'Custom' : _customCatCtrl.text.trim();
+
+    if (name.isEmpty) return;
+
+    setState(() {
+      _lines.add(_EditableLine(
+        id: UniqueKey().toString(),
+        category: cat,
+        name: name,
+        unitPrice: price,
+        qty: 1,
+      ));
+      _customNameCtrl.clear();
+      _customPriceCtrl.clear();
+    });
+  }
+
+  double get _totalPrice => _lines.fold(0.0, (sum, l) => sum + l.total);
+  int get _totalCount => _lines.fold(0, (sum, l) => sum + l.qty);
+
+  Future<void> _saveAndSync() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+
+    try {
+      final docId = (widget.order['id'] ?? widget.order['docId'] ?? '').toString();
+      if (docId.isEmpty) throw StateError('Missing order document ID');
+
+      final orderRef = FirebaseFirestore.instance.collection('orders').doc(docId);
+      final batch = FirebaseFirestore.instance.batch();
+
+      final Map<String, dynamic> selectedItemsMap = {};
+      final List<Map<String, dynamic>> itemsList = [];
+      int counter = 0;
+
+      for (final itm in _lines) {
+        for (int q = 0; q < itm.qty; q++) {
+          selectedItemsMap['item_$counter'] = {
+            'category': itm.category,
+            'itemType': itm.name,
+            'name': itm.name,
+            'price': itm.unitPrice.toStringAsFixed(2),
+            'description': itm.category,
+          };
+          counter++;
+        }
+        itemsList.add({
+          'category': itm.category,
+          'itemType': itm.name,
+          'name': itm.name,
+          'unitPrice': itm.unitPrice,
+          'price': itm.unitPrice.toStringAsFixed(2),
+          'quantity': itm.qty,
+          'qty': itm.qty,
+          'total': itm.total.toStringAsFixed(2),
+        });
+      }
+
+      final double newTotal = _totalPrice;
+      final double oldTotal = (widget.order['transactionAmount'] as num?)?.toDouble() ??
+          (widget.order['totalAmount'] as num?)?.toDouble() ??
+          0.0;
+      final double delta = (newTotal - oldTotal);
+
+      final newStatus = _targetStatus;
+      final bool needsApproval = (newStatus == 'awaiting_approval');
+
+      batch.update(orderRef, {
+        'bookingData.selectedItems': selectedItemsMap,
+        'selectedItems': selectedItemsMap,
+        'items': itemsList,
+        'transactionAmount': newTotal,
+        'totalAmount': newTotal,
+        'finalAmount': newTotal,
+        'pricing': {
+          'estimated': oldTotal,
+          'final': newTotal,
+          'adjustment': delta,
+        },
+        'status': newStatus,
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (needsApproval)
+          'approval': {
+            'status': 'pending',
+            'amount': newTotal,
+            'previousAmount': oldTotal,
+            'requestedAt': FieldValue.serverTimestamp(),
+            'notes': _notesCtrl.text.trim(),
+          },
+      });
+
+      batch.set(orderRef.collection('intake').doc('main'), {
+        'lines': itemsList,
+        'totalItems': _totalCount,
+        'totalPrice': newTotal,
+        'notes': _notesCtrl.text.trim(),
+        'updatedBy': 'admin',
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      final String historyNote = needsApproval
+          ? 'Items counted at facility ($_totalCount item${_totalCount == 1 ? '' : 's'}) — New total £${newTotal.toStringAsFixed(2)}, waiting for your approval'
+          : 'Items inspected & priced ($_totalCount item${_totalCount == 1 ? '' : 's'}) — Total £${newTotal.toStringAsFixed(2)}';
+
+      batch.set(orderRef.collection('history').doc(), {
+        'status': newStatus,
+        'at': FieldValue.serverTimestamp(),
+        'byRole': 'admin',
+        'note': historyNote,
+      });
+
+      await batch.commit();
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Order #${widget.order['orderId']} updated: $_totalCount items, £${newTotal.toStringAsFixed(2)}'),
+          backgroundColor: _P.azure,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving items: $e'),
+          backgroundColor: _P.rose,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = Responsive.isMobile(context);
+    final width = MediaQuery.sizeOf(context).width;
+    final dialogWidth = isMobile ? width * 0.95 : (width > 800 ? 740.0 : width * 0.9);
+
+    final oldTotal = (widget.order['transactionAmount'] as num?)?.toDouble() ??
+        (widget.order['totalAmount'] as num?)?.toDouble() ??
+        0.0;
+    final delta = _totalPrice - oldTotal;
+
+    List<Map<String, dynamic>> categoryItems = [];
+    if (_catalog.isNotEmpty && _selectedCategory != null) {
+      final catDoc = _catalog.firstWhere(
+        (c) => (c['name'] ?? c['title']) == _selectedCategory,
+        orElse: () => _catalog.first,
+      );
+      final rawList = catDoc['items'] as List?;
+      if (rawList != null) {
+        categoryItems = rawList.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+      }
+    }
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: Container(
+        width: dialogWidth,
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.9),
+        decoration: BoxDecoration(
+          color: _P.card,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.16), blurRadius: 30, offset: const Offset(0, 10)),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            // ── Header ──────────────────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 18, 16, 16),
+              decoration: const BoxDecoration(
+                color: Color(0xFF0F172A),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: _P.azure.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _P.azure.withOpacity(0.4)),
+                    ),
+                    child: const Icon(Icons.inventory_2_rounded, color: Color(0xFF34D399), size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Itemize Order & Update Bill',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Order #${widget.order['orderId'] ?? widget.order['id']} · ${widget.bookingData['firstName'] ?? ''} ${widget.bookingData['lastName'] ?? ''}',
+                          style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF94A3B8)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Body Scroll ──────────────────────────────────────────────────────
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Context strip
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: _P.canvas,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _P.border),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Original / Estimated Bill', style: _T.body(11, c: _P.textMuted)),
+                                const SizedBox(height: 2),
+                                Text('£${oldTotal.toStringAsFixed(2)}', style: _T.heading(15, c: _P.textPrimary)),
+                              ],
+                            ),
+                          ),
+                          Container(width: 1, height: 28, color: _P.border),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Current Status', style: _T.body(11, c: _P.textMuted)),
+                                const SizedBox(height: 2),
+                                _StatusBadge(status: _Status.of(widget.order['status'] ?? 'pending')),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Section: Add Items from Catalog
+                    Text('ADD CLOTHES & SERVICES', style: _T.label(11.5, c: _P.textMuted).copyWith(letterSpacing: 0.6)),
+                    const SizedBox(height: 8),
+
+                    if (_loadingCatalog)
+                      const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2)))
+                    else if (_catalog.isNotEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _P.border),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                // Category dropdown
+                                Expanded(
+                                  flex: 2,
+                                  child: DropdownButtonFormField<String>(
+                                    value: _selectedCategory,
+                                    decoration: InputDecoration(
+                                      labelText: 'Service Category',
+                                      labelStyle: _T.body(12),
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    style: _T.body(13, c: _P.textPrimary),
+                                    isExpanded: true,
+                                    items: _catalog.map((c) {
+                                      final name = '${c['name'] ?? c['title'] ?? 'Category'}';
+                                      return DropdownMenuItem(value: name, child: Text(name));
+                                    }).toList(),
+                                    onChanged: (cat) {
+                                      if (cat == null) return;
+                                      setState(() {
+                                        _selectedCategory = cat;
+                                        final catDoc = _catalog.firstWhere((c) => (c['name'] ?? c['title']) == cat);
+                                        final itms = (catDoc['items'] as List?)?.cast<Map>() ?? [];
+                                        _selectedCatalogItem = itms.isNotEmpty ? Map<String, dynamic>.from(itms.first) : null;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                // Item dropdown
+                                Expanded(
+                                  flex: 3,
+                                  child: DropdownButtonFormField<Map<String, dynamic>>(
+                                    value: _selectedCatalogItem,
+                                    decoration: InputDecoration(
+                                      labelText: 'Item / Garment',
+                                      labelStyle: _T.body(12),
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    style: _T.body(13, c: _P.textPrimary),
+                                    isExpanded: true,
+                                    items: categoryItems.map((itm) {
+                                      final name = '${itm['name'] ?? 'Item'}';
+                                      final p = itm['price'] != null ? ' - £${itm['price']}' : '';
+                                      return DropdownMenuItem(value: itm, child: Text('$name$p', overflow: TextOverflow.ellipsis));
+                                    }).toList(),
+                                    onChanged: (itm) => setState(() => _selectedCatalogItem = itm),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                ElevatedButton.icon(
+                                  onPressed: _addFromCatalog,
+                                  icon: const Icon(Icons.add_rounded, size: 16),
+                                  label: const Text('Add'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _P.azure,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 12),
+
+                    // Quick Custom Item Row
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _P.canvas,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _P.border),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              controller: _customNameCtrl,
+                              decoration: InputDecoration(
+                                hintText: 'Custom garment (e.g. Silk Cushion, Leather Jacket)',
+                                hintStyle: _T.body(12, c: _P.textMuted),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                fillColor: Colors.white,
+                                filled: true,
+                              ),
+                              style: _T.body(13, c: _P.textPrimary),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 1,
+                            child: TextField(
+                              controller: _customPriceCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: InputDecoration(
+                                hintText: '£ Price',
+                                hintStyle: _T.body(12, c: _P.textMuted),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                fillColor: Colors.white,
+                                filled: true,
+                              ),
+                              style: _T.body(13, c: _P.textPrimary),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            onPressed: _addCustomItem,
+                            icon: const Icon(Icons.add_rounded, size: 15),
+                            label: const Text('Custom'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _P.navy,
+                              side: const BorderSide(color: _P.border),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Section: Current Counted Clothes
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('BAG CONTENTS & COUNT ($_totalCount ITEMS)', style: _T.label(11.5, c: _P.textMuted).copyWith(letterSpacing: 0.6)),
+                        if (_lines.isNotEmpty)
+                          TextButton(
+                            onPressed: () => setState(() => _lines.clear()),
+                            style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
+                            child: Text('Clear all', style: _T.label(11, c: _P.rose)),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    if (_lines.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _P.border, style: BorderStyle.solid),
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(Icons.inventory_2_outlined, size: 36, color: _P.textMuted.withOpacity(0.5)),
+                            const SizedBox(height: 8),
+                            Text('No items added yet', style: _T.heading(14, c: _P.textSecondary)),
+                            const SizedBox(height: 4),
+                            Text('Pick clothes from the service catalog above to itemize this bag.', style: _T.body(12, c: _P.textMuted)),
+                          ],
+                        ),
+                      )
+                    else
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _P.border),
+                        ),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _lines.length,
+                          separatorBuilder: (_, __) => Divider(height: 1, color: _P.border),
+                          itemBuilder: (context, index) {
+                            final line = _lines[index];
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(line.name, style: _T.heading(13.5, c: _P.textPrimary)),
+                                        const SizedBox(height: 2),
+                                        Text(line.category, style: _T.body(11, c: _P.azure)),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // Unit Price Editable
+                                  SizedBox(
+                                    width: 80,
+                                    child: TextFormField(
+                                      initialValue: line.unitPrice.toStringAsFixed(2),
+                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                      decoration: InputDecoration(
+                                        prefixText: '£',
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                      ),
+                                      style: _T.label(12, c: _P.textPrimary),
+                                      onChanged: (val) {
+                                        final parsed = _parsePrice(val);
+                                        setState(() => line.unitPrice = parsed);
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+
+                                  // Stepper
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: _P.canvas,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: _P.border),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.remove, size: 14),
+                                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                          padding: EdgeInsets.zero,
+                                          onPressed: () {
+                                            setState(() {
+                                              if (line.qty > 1) {
+                                                line.qty--;
+                                              } else {
+                                                _lines.removeAt(index);
+                                              }
+                                            });
+                                          },
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                                          child: Text('${line.qty}', style: _T.heading(13)),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.add, size: 14),
+                                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                          padding: EdgeInsets.zero,
+                                          onPressed: () => setState(() => line.qty++),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 14),
+
+                                  // Line Total
+                                  SizedBox(
+                                    width: 60,
+                                    child: Text(
+                                      '£${line.total.toStringAsFixed(2)}',
+                                      textAlign: TextAlign.right,
+                                      style: _T.heading(13.5, c: _P.emerald),
+                                    ),
+                                  ),
+
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline_rounded, size: 18, color: _P.rose),
+                                    onPressed: () => setState(() => _lines.removeAt(index)),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+
+                    const SizedBox(height: 18),
+
+                    // Bill Summary Card
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: _P.azureSoft.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _P.azure.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('FINAL TOTAL BILL', style: _T.label(11, c: _P.azure).copyWith(letterSpacing: 0.6)),
+                                const SizedBox(height: 2),
+                                Text('£${_totalPrice.toStringAsFixed(2)}', style: _T.heading(20, c: _P.azure)),
+                              ],
+                            ),
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                delta >= 0 ? '+£${delta.toStringAsFixed(2)} diff' : '-£${delta.abs().toStringAsFixed(2)} diff',
+                                style: _T.label(12, c: delta > 0 ? _P.amber : _P.emerald),
+                              ),
+                              const SizedBox(height: 2),
+                              Text('$_totalCount total garment(s)', style: _T.body(11, c: _P.textMuted)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // Target Status Selection
+                    Text('ORDER STATUS & CUSTOMER ACTION', style: _T.label(11.5, c: _P.textMuted).copyWith(letterSpacing: 0.6)),
+                    const SizedBox(height: 8),
+
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _P.border),
+                      ),
+                      child: Column(
+                        children: [
+                          RadioListTile<String>(
+                            value: 'awaiting_approval',
+                            groupValue: _targetStatus,
+                            activeColor: _P.azure,
+                            title: Text('Require Customer Approval (Recommended)', style: _T.heading(13)),
+                            subtitle: Text('Customer sees "Approve Changes" card on website & app to confirm new bill.', style: _T.body(11.5, c: _P.textMuted)),
+                            onChanged: (v) => setState(() => _targetStatus = v!),
+                          ),
+                          const Divider(height: 1),
+                          RadioListTile<String>(
+                            value: 'cleaning',
+                            groupValue: _targetStatus,
+                            activeColor: _P.azure,
+                            title: Text('Start Cleaning Directly (No Approval Required)', style: _T.heading(13)),
+                            subtitle: Text('Moves order directly into cleaning queue at the facility.', style: _T.body(11.5, c: _P.textMuted)),
+                            onChanged: (v) => setState(() => _targetStatus = v!),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // Inspector Note
+                    TextField(
+                      controller: _notesCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Facility Inspector Note (Optional)',
+                        labelStyle: _T.body(12),
+                        hintText: 'e.g. 3 shirts washed & ironed, suit dry cleaned. Ready tomorrow.',
+                        hintStyle: _T.body(12, c: _P.textMuted),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                      style: _T.body(13, c: _P.textPrimary),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Footer ──────────────────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: BoxDecoration(
+                color: _P.canvas,
+                border: Border(top: BorderSide(color: _P.border)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                    onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                    child: Text('Cancel', style: _T.label(13, c: _P.textSecondary)),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _saving ? null : _saveAndSync,
+                    icon: _saving
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.check_circle_rounded, size: 16),
+                    label: Text(_saving ? 'Saving & Notifying...' : 'Save & Update Bill (£${_totalPrice.toStringAsFixed(2)})'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _P.azure,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      textStyle: _T.label(13, c: Colors.white),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
