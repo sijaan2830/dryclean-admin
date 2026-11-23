@@ -2,10 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../providers/firebase_admin_service.dart';
 import '../providers/firebase_auth_provider.dart';
 import '../services/fcm_sender_service.dart';
 import '../widgets/responsive.dart';
+import '../utils/printer_helper.dart';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 
@@ -150,7 +152,7 @@ class _OrdersScreenRealtimeState extends State<OrdersScreenRealtime>
   }
 
   String _filterLabel(String s) {
-    if (s == 'all') return 'All';
+    if (s == 'all') return 'Live Orders';
     return _Status.of(s).label;
   }
 
@@ -284,7 +286,10 @@ class _OrdersScreenRealtimeState extends State<OrdersScreenRealtime>
 
         final orders = snapshot.data ?? [];
         final filtered = _selectedStatus == 'all'
-            ? orders
+            ? orders.where((o) {
+                final st = (o['status'] ?? '').toString().toLowerCase();
+                return st != 'cancelled' && st != 'canceled';
+              }).toList()
             : orders.where((o) => (_Status.groups[_selectedStatus] ?? {_selectedStatus}).contains(o['status'])).toList();
 
         if (filtered.isEmpty) {
@@ -891,25 +896,74 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                       const SizedBox(width: 10),
                       _buildDateTile('Delivery', bookingData['deliveryDate'], bookingData['deliveryTime'], Icons.download_rounded, _P.emerald, _P.emeraldBg),
                     ]),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: _P.canvas,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _P.border.withOpacity(0.5)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.location_on_rounded, size: 14, color: _P.azure),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _getAddressString(bookingData),
+                            style: _T.body(11.5, c: _P.textSecondary),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
 
             // ── Action bar ──
             Container(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: Row(
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   _TextAction(
-                    label: _isExpanded ? 'Show Less' : 'Show More',
+                    label: _isExpanded ? 'Show Less' : 'Details & Actions',
                     icon: _isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
                     onTap: _toggleExpand,
                   ),
-                  const Spacer(),
-                  _OutlineAction(
-                    label: 'Print',
-                    icon: Icons.print_outlined,
-                    onTap: () => _printOrderDetails(),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () => _openItemizeModal(context, widget.order, bookingData),
+                        icon: const Icon(Icons.edit_note_rounded, size: 15),
+                        label: Text(
+                          items.isEmpty ? 'Itemize Bag' : 'Edit Bill (${items.length})',
+                          style: _T.label(11.5, c: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _P.azure,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                      _OutlineAction(
+                        label: 'Invoice',
+                        icon: Icons.receipt_long_rounded,
+                        onTap: _printOrderDetails,
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1376,124 +1430,372 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
     final items = _extractItems(widget.order, bookingData);
     final orderTypeLabel = _getOrderTypeLabel(widget.order, bookingData, services, items);
 
-    final itemsBlock = items.isNotEmpty
-        ? items.map((i) {
-            final cat = (i['category'] ?? '').toString().trim();
-            final type = (i['itemType'] ?? i['name'] ?? '').toString().trim();
-            final title = cat.isNotEmpty && type.isNotEmpty && cat.toLowerCase() != type.toLowerCase()
-                ? '$cat – $type'
-                : (type.isNotEmpty ? type : 'Item');
-            final p = i['price']?.toString() ?? '0.00';
-            final qty = (i['quantity'] as num?)?.toInt() ?? 1;
-            return '• $title ${qty > 1 ? '(x$qty)' : ''}: £$p';
-          }).join('\n')
-        : 'Services: ${services.isNotEmpty ? services.join(', ') : 'Standard Cleaning'}\n(Items to be counted and priced at facility)';
-
-    final orderDetails = '''
-ORDER DETAILS
-=============
-Order ID: #${widget.order['orderId']}
-Order Type: $orderTypeLabel
-Selected Services: ${services.isNotEmpty ? services.join(', ') : 'Standard Cleaning'}
-Status: ${widget.order['status']?.toString().toUpperCase() ?? 'PENDING'}
-Payment: ${(widget.order['paymentMethod'] ?? bookingData['paymentMethod'] ?? 'COD').toString().toUpperCase()}
-Total Price: £${_getTotalAmount()}
-
-CUSTOMER INFORMATION
-====================
-Name: ${bookingData['firstName'] ?? 'Unknown'} ${bookingData['lastName'] ?? ''}
-Email: ${bookingData['email'] ?? 'No email'}
-Phone: ${bookingData['phone'] ?? 'No phone'}
-Customer Type: ${bookingData['customerType'] ?? 'individual'}
-${bookingData['companyName'] != null ? 'Company: ${bookingData['companyName']}' : ''}
-
-ADDRESS INFORMATION
-===================
-${_getAddressString(bookingData)}
-
-COLLECTION & DELIVERY
-=====================
-Collection: ${bookingData['collectionDate'] ?? 'N/A'} ${bookingData['collectionTime'] ?? ''}
-Delivery: ${bookingData['deliveryDate'] ?? 'N/A'} ${bookingData['deliveryTime'] ?? ''}
-${bookingData['instructions'] != null && bookingData['instructions'].toString().isNotEmpty ? 'Instructions: ${bookingData['instructions']}' : ''}
-${bookingData['specialInstructions'] != null && bookingData['specialInstructions'].toString().isNotEmpty ? 'Special Note: ${bookingData['specialInstructions']}' : ''}
-
-ITEMS / SERVICES
-================
-$itemsBlock
-
-Generated on: ${DateTime.now().toString()}
-    ''';
+    final orderId     = widget.order['orderId'] ?? widget.order['id'] ?? 'DCP-0000';
+    final totalAmount = _getTotalAmount();
+    final status      = _Status.of(widget.order['status'] ?? '');
+    final addressStr  = _getAddressString(bookingData);
+    final customerName = '${bookingData['firstName'] ?? 'Valued'} ${bookingData['lastName'] ?? 'Customer'}'.trim();
+    final phone       = (bookingData['phone'] ?? 'N/A').toString();
+    final email       = (bookingData['email'] ?? 'N/A').toString();
+    final colDate     = '${bookingData['collectionDate'] ?? 'N/A'} ${bookingData['collectionTime'] ?? ''}'.trim();
+    final delDate     = '${bookingData['deliveryDate'] ?? 'N/A'} ${bookingData['deliveryTime'] ?? ''}'.trim();
+    final paymentMethod = (widget.order['paymentMethod'] ?? bookingData['paymentMethod'] ?? 'SumUp / Card / COD').toString().toUpperCase();
 
     showDialog(
       context: context,
-      builder: (_) => Dialog(
+      builder: (dialogCtx) => Dialog(
         backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         child: Container(
-          width: 600,
-          height: 680,
+          width: 680,
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(dialogCtx).height * 0.92),
           decoration: BoxDecoration(
-            color: _P.card,
+            color: Colors.white,
             borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 32, offset: const Offset(0, 12))],
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 36, offset: const Offset(0, 12)),
+            ],
           ),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
+              // Top Bar
               Container(
-                padding: const EdgeInsets.fromLTRB(22, 18, 14, 18),
-                decoration: BoxDecoration(
-                  color: _P.navy,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                color: const Color(0xFF0F172A),
                 child: Row(
                   children: [
-                    const Icon(Icons.print_rounded, color: Colors.white, size: 20),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text('Order Preview', style: _T.heading(16, c: Colors.white))),
+                    const Icon(Icons.receipt_long_rounded, color: Color(0xFF38BDF8), size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Tax Invoice & Order Receipt · #$orderId',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                     IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close_rounded, color: Colors.white60, size: 20),
+                      icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                      onPressed: () => Navigator.of(dialogCtx).pop(),
                     ),
                   ],
                 ),
               ),
+
+              // Printable Invoice Sheet
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(24),
                   child: Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: _P.canvas,
+                      color: Colors.white,
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _P.border),
                     ),
-                    child: Text(orderDetails, style: _T.body(12).copyWith(height: 1.6, fontFamily: 'monospace')),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 1. Signature Brand Header
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 44,
+                                      height: 44,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0E3AA8),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: const Text('DC+', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'DryClean Plus',
+                                          style: GoogleFonts.satisfy(
+                                            fontSize: 28,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF0E3AA8),
+                                          ),
+                                        ),
+                                        Text(
+                                          'PREMIUM TEXTILE & GARMENT CARE',
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 1.2,
+                                            color: const Color(0xFF0F9F90),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text('DryClean Plus Ltd · London, UK\nsupport@drycleanplus.co.uk · www.drycleanplus.co.uk',
+                                    style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF64748B), height: 1.4)),
+                              ],
+                            ),
+                            const Spacer(),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF0E3AA8).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text('OFFICIAL INVOICE', style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF0E3AA8))),
+                                ),
+                                const SizedBox(height: 6),
+                                Text('Invoice #: INV-$orderId', style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+                                Text('Date: ${DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now())}', style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF64748B))),
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: status.color.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(status.label, style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700, color: status.color)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 20),
+                        const Divider(color: Color(0xFFCBD5E1), thickness: 1.2),
+                        const SizedBox(height: 16),
+
+                        // 2. Customer & Route Metadata Box
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('CUSTOMER DETAILS', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF64748B), letterSpacing: 0.8)),
+                                    const SizedBox(height: 4),
+                                    Text(customerName, style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+                                    const SizedBox(height: 2),
+                                    Text('Phone: $phone', style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF334155))),
+                                    Text('Email: $email', style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF334155))),
+                                    const SizedBox(height: 4),
+                                    Text('Address: $addressStr', style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF334155), height: 1.3)),
+                                  ],
+                                ),
+                              ),
+                              Container(width: 1, height: 90, color: const Color(0xFFCBD5E1)),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('SCHEDULE & SERVICE', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF64748B), letterSpacing: 0.8)),
+                                    const SizedBox(height: 4),
+                                    Text('Collection Slot:', style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF0E3AA8))),
+                                    Text(colDate, style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF0F172A))),
+                                    const SizedBox(height: 6),
+                                    Text('Delivery Slot:', style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF10B981))),
+                                    Text(delDate, style: GoogleFonts.plusJakartaSans(fontSize: 12, color: const Color(0xFF0F172A))),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // 3. Itemized Table
+                        Text('INVOICED GARMENTS & SERVICES', style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A), letterSpacing: 0.6)),
+                        const SizedBox(height: 10),
+
+                        Table(
+                          border: TableBorder(
+                            horizontalInside: const BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                            bottom: const BorderSide(color: Color(0xFFCBD5E1), width: 1.5),
+                          ),
+                          columnWidths: const {
+                            0: FlexColumnWidth(4),
+                            1: FlexColumnWidth(2.5),
+                            2: FlexColumnWidth(1.2),
+                            3: FlexColumnWidth(1.8),
+                            4: FlexColumnWidth(1.8),
+                          },
+                          children: [
+                            // Table Header
+                            TableRow(
+                              decoration: const BoxDecoration(color: Color(0xFFF1F5F9)),
+                              children: [
+                                Padding(padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8), child: Text('ITEM / GARMENT', style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF334155)))),
+                                Padding(padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6), child: Text('CATEGORY', style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF334155)))),
+                                Padding(padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6), child: Text('QTY', textAlign: TextAlign.center, style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF334155)))),
+                                Padding(padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6), child: Text('RATE', textAlign: TextAlign.right, style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF334155)))),
+                                Padding(padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8), child: Text('TOTAL', textAlign: TextAlign.right, style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w800, color: const Color(0xFF334155)))),
+                              ],
+                            ),
+                            // Table Rows
+                            if (items.isNotEmpty)
+                              ...items.map((itm) {
+                                final name = (itm['itemType'] ?? itm['name'] ?? 'Garment').toString();
+                                final cat = (itm['category'] ?? 'General').toString();
+                                final qty = (itm['quantity'] as num?)?.toInt() ?? (itm['qty'] as num?)?.toInt() ?? 1;
+                                final p = (itm['unitPrice'] as num?)?.toDouble() ?? _parsePrice(itm['price']);
+                                final lineTot = p * qty;
+                                return TableRow(
+                                  children: [
+                                    Padding(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8), child: Text(name, style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)))),
+                                    Padding(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6), child: Text(cat, style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF64748B)))),
+                                    Padding(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6), child: Text('$qty', textAlign: TextAlign.center, style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF0F172A)))),
+                                    Padding(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6), child: Text('£${p.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF334155)))),
+                                    Padding(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8), child: Text('£${lineTot.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)))),
+                                  ],
+                                );
+                              })
+                            else
+                              TableRow(
+                                children: [
+                                  Padding(padding: const EdgeInsets.all(12), child: Text('Standard Service Bag (Priced upon facility inspection)', style: GoogleFonts.plusJakartaSans(fontSize: 12, fontStyle: FontStyle.italic, color: const Color(0xFF64748B)))),
+                                  Padding(padding: const EdgeInsets.all(12), child: Text(services.isNotEmpty ? services.join(', ') : 'Dry Cleaning', style: GoogleFonts.plusJakartaSans(fontSize: 11.5))),
+                                  const Padding(padding: EdgeInsets.all(12), child: Text('1', textAlign: TextAlign.center)),
+                                  Padding(padding: const EdgeInsets.all(12), child: Text('£$totalAmount', textAlign: TextAlign.right)),
+                                  Padding(padding: const EdgeInsets.all(12), child: Text('£$totalAmount', textAlign: TextAlign.right, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold))),
+                                ],
+                              ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 18),
+
+                        // 4. Financial Totals
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              flex: 5,
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('PAYMENT & TERMS', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF475569))),
+                                    const SizedBox(height: 4),
+                                    Text('Payment Mode: $paymentMethod', style: GoogleFonts.plusJakartaSans(fontSize: 11.5, fontWeight: FontWeight.w600, color: const Color(0xFF0E3AA8))),
+                                    const SizedBox(height: 2),
+                                    Text('SumUp Secure Payment Link:\nhttps://pay.sumup.com/b2c/Q3MO3NEP', style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF64748B))),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              flex: 4,
+                              child: Column(
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('Subtotal:', style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF64748B))),
+                                      Text('£$totalAmount', style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('Collection & Delivery:', style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF64748B))),
+                                      Text('FREE', style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF10B981))),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Divider(color: Color(0xFFCBD5E1)),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('Total Due:', style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
+                                      Text('£$totalAmount', style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w900, color: const Color(0xFF0E3AA8))),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 24),
+                        Center(
+                          child: Text(
+                            'Thank you for trusting DryClean Plus! · London\'s Premier Laundry Partner',
+                            style: GoogleFonts.satisfy(fontSize: 15, color: const Color(0xFF64748B)),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(18),
+
+              // Bottom Actions
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF8FAFC),
+                  border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogCtx).pop(),
+                      child: const Text('Close'),
+                    ),
+                    const SizedBox(width: 12),
                     ElevatedButton.icon(
                       onPressed: () {
+                        printPage();
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Order details ready for printing', style: _T.body(13, c: Colors.white)),
-                            backgroundColor: _P.emerald,
+                          const SnackBar(
+                            content: Text('Opening print preview...'),
+                            backgroundColor: Color(0xFF0E3AA8),
                             behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                         );
                       },
-                      icon: const Icon(Icons.print_rounded, size: 17),
-                      label: const Text('Print'),
+                      icon: const Icon(Icons.print_rounded, size: 18),
+                      label: const Text('Print / Save PDF'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _P.azure,
+                        backgroundColor: const Color(0xFF0E3AA8),
                         foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
