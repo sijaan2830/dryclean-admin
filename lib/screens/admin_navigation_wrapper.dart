@@ -55,6 +55,7 @@ class _AdminNavigationWrapperState extends State<AdminNavigationWrapper> {
   bool _collapsed = false;
   final _scaffold = GlobalKey<ScaffoldState>();
   final _db = FirebaseFirestore.instance;
+  late final List<Widget> _pages;
 
   // live counters for the sidebar badges
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _attention = _db
@@ -67,6 +68,7 @@ class _AdminNavigationWrapperState extends State<AdminNavigationWrapper> {
   @override
   void initState() {
     super.initState();
+    _pages = kAdminNav.map((item) => item.build()).toList();
     adminNavRequest.addListener(_onNavRequest);
   }
 
@@ -145,11 +147,9 @@ class _AdminNavigationWrapperState extends State<AdminNavigationWrapper> {
                       ),
                     ),
                     Expanded(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 220),
-                        switchInCurve: Curves.easeOut,
-                        transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
-                        child: KeyedSubtree(key: ValueKey(_index), child: item.build()),
+                      child: IndexedStack(
+                        index: _index,
+                        children: _pages,
                       ),
                     ),
                   ]),

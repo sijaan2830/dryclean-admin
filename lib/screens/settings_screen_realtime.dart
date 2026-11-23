@@ -108,6 +108,31 @@ class _SettingsScreenRealtimeState extends State<SettingsScreenRealtime> {
                         ),
                       ]),
                       
+                      _buildSettingsSection('Pricing & Order Fees', [
+                        _buildSwitchItem(
+                          'Delivery Fee Enabled',
+                          _settings?['deliveryFeeEnabled'] ?? false,
+                          (value) => _updateSetting('deliveryFeeEnabled', value),
+                        ),
+                        _buildSettingItem(
+                          'Delivery Fee Amount',
+                          '£${((_settings?['deliveryFee'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2)}',
+                          Icons.local_shipping_outlined,
+                          () => _showFeeDialog('deliveryFee', 'Delivery Fee Amount', (_settings?['deliveryFee'] as num?)?.toDouble() ?? 0.0),
+                        ),
+                        _buildSwitchItem(
+                          'Service Fee Enabled',
+                          _settings?['serviceFeeEnabled'] ?? true,
+                          (value) => _updateSetting('serviceFeeEnabled', value),
+                        ),
+                        _buildSettingItem(
+                          'Service Fee Amount',
+                          '£${((_settings?['serviceFee'] as num?)?.toDouble() ?? 2.99).toStringAsFixed(2)}',
+                          Icons.receipt_long_outlined,
+                          () => _showFeeDialog('serviceFee', 'Service Fee Amount', (_settings?['serviceFee'] as num?)?.toDouble() ?? 2.99),
+                        ),
+                      ]),
+
                       _buildSettingsSection('App Settings', [
                         _buildSettingItem(
                           'Default Currency',
@@ -350,6 +375,43 @@ class _SettingsScreenRealtimeState extends State<SettingsScreenRealtime> {
           ElevatedButton(
             onPressed: () {
               _updateSetting(key, controller.text);
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF073B1B),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFeeDialog(String key, String title, double currentVal) {
+    final controller = TextEditingController(text: currentVal.toStringAsFixed(2));
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Edit $title'),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            prefixText: '£ ',
+            border: OutlineInputBorder(),
+            hintText: '0.00',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final parsed = double.tryParse(controller.text.replaceAll('£', '').trim()) ?? 0.0;
+              _updateSetting(key, parsed);
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(

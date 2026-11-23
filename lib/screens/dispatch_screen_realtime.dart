@@ -119,7 +119,7 @@ Future<LatLng?> _geocode(String postcode) async {
   final pc = postcode.replaceAll(' ', '');
   if (pc.isEmpty) return null;
   try {
-    final r = await http.get(Uri.parse('https://api.postcodes.io/postcodes/$pc')).timeout(const Duration(seconds: 6));
+    final r = await http.get(Uri.parse('https://api.postcodes.io/postcodes/$pc')).timeout(const Duration(milliseconds: 1800));
     if (r.statusCode != 200) return null;
     final j = jsonDecode(r.body)['result'];
     return LatLng((j['latitude'] as num).toDouble(), (j['longitude'] as num).toDouble());
@@ -276,7 +276,16 @@ class _DispatchScreenRealtimeState extends State<DispatchScreenRealtime> with Si
     final pickup = type == 'pickup';
     final addr = _m(pickup ? b['selectedAddress'] : (b['deliveryAddress'] ?? b['selectedAddress']));
     final postcode = _s(addr['postalCode'] ?? addr['postcode']);
-    final geo = await _geocode(postcode);
+    LatLng? geo;
+    if (addr['latitude'] != null && addr['longitude'] != null) {
+      geo = LatLng((addr['latitude'] as num).toDouble(), (addr['longitude'] as num).toDouble());
+    } else if (addr['lat'] != null && addr['lng'] != null) {
+      geo = LatLng((addr['lat'] as num).toDouble(), (addr['lng'] as num).toDouble());
+    } else if (o['geo'] != null && o['geo'] is Map && o['geo']['lat'] != null && o['geo']['lng'] != null) {
+      geo = LatLng((o['geo']['lat'] as num).toDouble(), (o['geo']['lng'] as num).toDouble());
+    } else {
+      geo = await _geocode(postcode);
+    }
     final date = _dayKey(res.date);
     final existing = await _db.collection('jobs').where('driverId', isEqualTo: res.driver.id).where('date', isEqualTo: date).get();
     final items = _m(b['selectedItems']).values.map(_m).map((i) => {
@@ -400,7 +409,8 @@ class _DispatchScreenRealtimeState extends State<DispatchScreenRealtime> with Si
           'email': res.email,
           'phone': res.phone,
           'vehicle': {'make': res.make, 'colour': res.colour, 'reg': res.reg.toUpperCase()},
-          'isOnline': false,
+          'isOnline': true,
+          'status': 'active',
           'createdAt': FieldValue.serverTimestamp(),
         });
       }
@@ -657,7 +667,7 @@ class _JobsList extends StatelessWidget {
                     Wrap(spacing: 6, children: [_Pill(pickup ? 'Pickup' : 'Delivery', pickup ? _D.amber : _D.emerald, pickup ? _D.amberBg : _D.emeraldBg), _Pill(st.$1, st.$2, st.$3)]),
                     const SizedBox(height: 4),
                     Text('${_s(m['customerName']).ifEmpty('Customer')} · #${_s(m['orderId'])}', style: _D.t(14, w: FontWeight.w800)),
-                    Text([_s(a['postalCode']), _s(m['slot'])].where((e) => e.isNotEmpty).join(' · '), style: _D.t(12.5, c: _D.mut)),
+                    Text([_s(a['line1']), _s(a['postalCode']), _s(m['slot'])].where((e) => e.isNotEmpty).join(' · '), style: _D.t(12.5, c: _D.mut)),
                   ]),
                 ),
                 if (m['status'] == 'assigned')

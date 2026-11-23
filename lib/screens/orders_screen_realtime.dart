@@ -772,9 +772,9 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
       decoration: BoxDecoration(
         color: _P.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _P.border),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 3)),
+          BoxShadow(color: const Color(0xFF0F172A).withOpacity(0.05), blurRadius: 16, offset: const Offset(0, 4)),
         ],
       ),
       child: ClipRRect(
@@ -1790,10 +1790,23 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                     const SizedBox(width: 12),
                     ElevatedButton.icon(
                       onPressed: () {
-                        printPage();
+                        final html = _buildInvoiceHtml(
+                          orderId: orderId,
+                          customerName: customerName,
+                          phone: phone,
+                          email: email,
+                          addressStr: addressStr,
+                          colDate: colDate,
+                          delDate: delDate,
+                          statusLabel: status.label,
+                          items: items,
+                          totalAmount: totalAmount,
+                          paymentMethod: paymentMethod,
+                        );
+                        printInvoiceHtml(html);
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Opening print preview...'),
+                            content: Text('Opening printable invoice...'),
                             backgroundColor: Color(0xFF0E3AA8),
                             behavior: SnackBarBehavior.floating,
                           ),
@@ -1816,6 +1829,179 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
         ),
       ),
     );
+  }
+
+  String _buildInvoiceHtml({
+    required String orderId,
+    required String customerName,
+    required String phone,
+    required String email,
+    required String addressStr,
+    required String colDate,
+    required String delDate,
+    required String statusLabel,
+    required List<Map<String, dynamic>> items,
+    required String totalAmount,
+    required String paymentMethod,
+  }) {
+    final dateStr = DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now());
+    final StringBuffer rows = StringBuffer();
+    if (items.isEmpty) {
+      rows.write('''
+        <tr>
+          <td colspan="6" style="text-align: center; color: #64748B; padding: 20px; font-style: italic;">
+            Standard Bag Service · Garments counted & itemized at facility
+          </td>
+        </tr>
+      ''');
+    } else {
+      for (int i = 0; i < items.length; i++) {
+        final itm = items[i];
+        final name = itm['itemType'] ?? itm['name'] ?? 'Garment';
+        final cat = itm['category'] ?? 'General';
+        final qty = (itm['quantity'] as num?)?.toInt() ?? (itm['qty'] as num?)?.toInt() ?? 1;
+        final p = (itm['unitPrice'] as num?)?.toDouble() ?? _parsePrice(itm['price']);
+        final rowTotal = (p * qty).toStringAsFixed(2);
+        rows.write('''
+          <tr>
+            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; font-weight: 600;">\${i + 1}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #0F172A;">\$name</td>
+            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; color: #64748B;">\$cat</td>
+            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: center; font-weight: 600;">\$qty</td>
+            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right;">£\${p.toStringAsFixed(2)}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-weight: 800; color: #0E3AA8;">£\$rowTotal</td>
+          </tr>
+        ''');
+      }
+    }
+
+    return '''<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Invoice #INV-\$orderId · DryClean Plus</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Satisfy&display=swap" rel="stylesheet">
+  <style>
+    @page { size: A4 portrait; margin: 12mm 14mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #0F172A;
+      margin: 0;
+      padding: 24px;
+      background: #FFFFFF;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 18px; border-bottom: 2px solid #E2E8F0; }
+    .brand-title { font-family: 'Satisfy', cursive; font-size: 32px; color: #0E3AA8; font-weight: 700; margin: 0; }
+    .brand-sub { font-size: 9.5px; font-weight: 800; letter-spacing: 1.5px; color: #0F9F90; margin-top: 2px; }
+    .brand-meta { font-size: 11px; color: #64748B; margin-top: 6px; line-height: 1.4; }
+    .invoice-tag { background: #EEF2FF; color: #0E3AA8; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 6px; display: inline-block; }
+    .meta-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; margin: 18px 0; display: flex; gap: 20px; }
+    .meta-col { flex: 1; }
+    .meta-label { font-size: 10px; font-weight: 800; color: #64748B; letter-spacing: 0.8px; margin-bottom: 4px; }
+    .meta-val { font-size: 12.5px; color: #334155; }
+    .meta-bold { font-size: 13.5px; font-weight: 700; color: #0F172A; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 18px; }
+    th { background: #F1F5F9; color: #475569; font-size: 11px; font-weight: 800; text-align: left; padding: 10px; border-bottom: 2px solid #CBD5E1; text-transform: uppercase; letter-spacing: 0.5px; }
+    .financials { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 14px; }
+    .payment-box { width: 52%; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 16px; }
+    .totals-box { width: 42%; }
+    .tot-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; color: #64748B; }
+    .tot-bold { color: #0F172A; font-weight: 600; }
+    .tot-due { font-size: 16px; font-weight: 800; color: #0F172A; border-top: 2px solid #CBD5E1; padding-top: 8px; margin-top: 8px; display: flex; justify-content: space-between; }
+    .tot-due-val { font-size: 20px; font-weight: 900; color: #0E3AA8; }
+    .footer { margin-top: 36px; text-align: center; border-top: 1px solid #E2E8F0; padding-top: 16px; }
+    .footer-script { font-family: 'Satisfy', cursive; font-size: 18px; color: #0E3AA8; }
+    .footer-sub { font-size: 11px; color: #94A3B8; margin-top: 4px; }
+    @media print {
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="background: #0E3AA8; color: white; font-weight: 900; font-size: 18px; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">DC+</div>
+        <div>
+          <h1 class="brand-title">DryClean Plus</h1>
+          <div class="brand-sub">PREMIUM TEXTILE & GARMENT CARE</div>
+        </div>
+      </div>
+      <div class="brand-meta">DryClean Plus Ltd · London, United Kingdom<br>support@drycleanplus.co.uk · www.drycleanplus.co.uk</div>
+    </div>
+    <div style="text-align: right;">
+      <div class="invoice-tag">OFFICIAL INVOICE</div>
+      <div style="font-size: 14px; font-weight: 800; color: #0F172A; margin-top: 6px;">INV-\$orderId</div>
+      <div style="font-size: 11px; color: #64748B; margin-top: 2px;">\$dateStr</div>
+      <div style="font-size: 11px; font-weight: 700; color: #0E3AA8; margin-top: 4px;">Status: \$statusLabel</div>
+    </div>
+  </div>
+
+  <div class="meta-box">
+    <div class="meta-col">
+      <div class="meta-label">CUSTOMER DETAILS</div>
+      <div class="meta-bold">\$customerName</div>
+      <div class="meta-val">Phone: \$phone</div>
+      <div class="meta-val">Email: \$email</div>
+      <div class="meta-val" style="margin-top: 4px;">Address: \$addressStr</div>
+    </div>
+    <div style="width: 1px; background: #CBD5E1;"></div>
+    <div class="meta-col">
+      <div class="meta-label">SCHEDULE & LOGISTICS</div>
+      <div style="font-size: 11px; font-weight: 700; color: #0E3AA8;">Collection Slot:</div>
+      <div class="meta-val" style="margin-bottom: 6px;">\$colDate</div>
+      <div style="font-size: 11px; font-weight: 700; color: #10B981;">Delivery Slot:</div>
+      <div class="meta-val">\$delDate</div>
+    </div>
+  </div>
+
+  <div style="font-size: 11px; font-weight: 800; color: #0F172A; text-transform: uppercase; letter-spacing: 0.6px;">INVOICED GARMENTS & SERVICES</div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 35px;">#</th>
+        <th>Item / Garment</th>
+        <th>Category</th>
+        <th style="text-align: center; width: 50px;">Qty</th>
+        <th style="text-align: right; width: 90px;">Unit Price</th>
+        <th style="text-align: right; width: 90px;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      \$rows
+    </tbody>
+  </table>
+
+  <div class="financials">
+    <div class="payment-box">
+      <div class="meta-label">PAYMENT & METHOD</div>
+      <div style="font-size: 12px; font-weight: 700; color: #0E3AA8; margin-bottom: 4px;">Payment Mode: \$paymentMethod</div>
+      <div style="font-size: 11px; color: #64748B; line-height: 1.4;">
+        SumUp Official Payment Link:<br>
+        <strong style="color: #0E3AA8;">https://pay.sumup.com/b2c/Q3MO3NEP</strong>
+      </div>
+    </div>
+    <div class="totals-box">
+      <div class="tot-row"><span>Subtotal:</span><span class="tot-bold">£\$totalAmount</span></div>
+      <div class="tot-row"><span>Collection & Delivery:</span><span class="tot-bold" style="color: #10B981;">FREE</span></div>
+      <div class="tot-due">
+        <span>Total Due:</span>
+        <span class="tot-due-val">£\$totalAmount</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-script">Thank you for trusting DryClean Plus! · London's Premier Laundry Partner</div>
+    <div class="footer-sub">For queries or amends, contact support@drycleanplus.co.uk · DryClean Plus Ltd</div>
+  </div>
+</body>
+</html>''';
   }
 
   // ── buildInfoCard (kept for backwards compat) ─────────────────────────────
@@ -1869,6 +2055,7 @@ class _StatusBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: status.bg,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: status.color.withOpacity(0.35), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -2135,6 +2322,7 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
   String? _selectedCategory;
   Map<String, dynamic>? _selectedCatalogItem;
 
+  String _customCategory = 'Dry Clean';
   final _customNameCtrl = TextEditingController();
   final _customPriceCtrl = TextEditingController();
   final _customCatCtrl = TextEditingController(text: 'General');
@@ -2265,7 +2453,7 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
   void _addCustomItem() {
     final name = _customNameCtrl.text.trim();
     final price = _parsePrice(_customPriceCtrl.text);
-    final cat = _customCatCtrl.text.trim().isEmpty ? 'Custom' : _customCatCtrl.text.trim();
+    final cat = _customCategory.trim().isEmpty ? 'Custom' : _customCategory.trim();
 
     if (name.isEmpty) return;
 
@@ -2696,66 +2884,126 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: _P.border),
                       ),
-                      child: isMobile
-                          ? Column(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.playlist_add_rounded, size: 16, color: _P.azure),
+                              const SizedBox(width: 6),
+                              Text('ADD CUSTOM / UNLISTED ITEM', style: _T.label(11, c: _P.azure).copyWith(letterSpacing: 0.5)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          if (isMobile) ...[
+                            DropdownButtonFormField<String>(
+                              value: _customCategory,
+                              decoration: InputDecoration(
+                                labelText: 'Category',
+                                labelStyle: _T.body(12),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                fillColor: Colors.white,
+                                filled: true,
+                              ),
+                              style: _T.body(13, c: _P.textPrimary),
+                              isExpanded: true,
+                              items: const [
+                                DropdownMenuItem(value: 'Dry Clean', child: Text('Dry Clean')),
+                                DropdownMenuItem(value: 'Wash & Fold', child: Text('Wash & Fold')),
+                                DropdownMenuItem(value: 'Ironing', child: Text('Ironing')),
+                                DropdownMenuItem(value: 'Bedding', child: Text('Bedding')),
+                                DropdownMenuItem(value: 'Repairs & Alterations', child: Text('Repairs & Alterations')),
+                                DropdownMenuItem(value: 'Leather & Suede', child: Text('Leather & Suede')),
+                                DropdownMenuItem(value: 'Custom Item', child: Text('Custom Item')),
+                              ],
+                              onChanged: (v) => setState(() => _customCategory = v ?? 'Dry Clean'),
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _customNameCtrl,
+                              decoration: InputDecoration(
+                                hintText: 'Garment name (e.g. Silk Cushion, Leather Jacket)',
+                                hintStyle: _T.body(12, c: _P.textMuted),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                fillColor: Colors.white,
+                                filled: true,
+                              ),
+                              style: _T.body(13, c: _P.textPrimary),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
                               children: [
-                                TextField(
-                                  controller: _customNameCtrl,
-                                  decoration: InputDecoration(
-                                    hintText: 'Custom garment (e.g. Silk Cushion, Leather Jacket)',
-                                    hintStyle: _T.body(12, c: _P.textMuted),
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                    fillColor: Colors.white,
-                                    filled: true,
+                                Expanded(
+                                  child: TextField(
+                                    controller: _customPriceCtrl,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    decoration: InputDecoration(
+                                      prefixText: '£ ',
+                                      hintText: 'Price (e.g. 15.00)',
+                                      hintStyle: _T.body(12, c: _P.textMuted),
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      fillColor: Colors.white,
+                                      filled: true,
+                                    ),
+                                    style: _T.body(13, c: _P.textPrimary),
                                   ),
-                                  style: _T.body(13, c: _P.textPrimary),
                                 ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _customPriceCtrl,
-                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                        decoration: InputDecoration(
-                                          prefixText: '£ ',
-                                          hintText: 'Price (e.g. 15.00)',
-                                          hintStyle: _T.body(12, c: _P.textMuted),
-                                          isDense: true,
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                          fillColor: Colors.white,
-                                          filled: true,
-                                        ),
-                                        style: _T.body(13, c: _P.textPrimary),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    OutlinedButton.icon(
-                                      onPressed: _addCustomItem,
-                                      icon: const Icon(Icons.add_rounded, size: 15),
-                                      label: const Text('Add Custom'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: _P.navy,
-                                        side: const BorderSide(color: _P.border),
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                      ),
-                                    ),
-                                  ],
+                                const SizedBox(width: 8),
+                                ElevatedButton.icon(
+                                  onPressed: _addCustomItem,
+                                  icon: const Icon(Icons.add_rounded, size: 15),
+                                  label: const Text('Add Item'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _P.navy,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
                                 ),
                               ],
-                            )
-                          : Row(
+                            ),
+                          ] else ...[
+                            Row(
                               children: [
+                                SizedBox(
+                                  width: 170,
+                                  child: DropdownButtonFormField<String>(
+                                    value: _customCategory,
+                                    decoration: InputDecoration(
+                                      labelText: 'Category',
+                                      labelStyle: _T.body(12),
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      fillColor: Colors.white,
+                                      filled: true,
+                                    ),
+                                    style: _T.body(13, c: _P.textPrimary),
+                                    items: const [
+                                      DropdownMenuItem(value: 'Dry Clean', child: Text('Dry Clean')),
+                                      DropdownMenuItem(value: 'Wash & Fold', child: Text('Wash & Fold')),
+                                      DropdownMenuItem(value: 'Ironing', child: Text('Ironing')),
+                                      DropdownMenuItem(value: 'Bedding', child: Text('Bedding')),
+                                      DropdownMenuItem(value: 'Repairs & Alterations', child: Text('Repairs & Alterations')),
+                                      DropdownMenuItem(value: 'Leather & Suede', child: Text('Leather & Suede')),
+                                      DropdownMenuItem(value: 'Custom Item', child: Text('Custom Item')),
+                                    ],
+                                    onChanged: (v) => setState(() => _customCategory = v ?? 'Dry Clean'),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
                                 Expanded(
                                   flex: 3,
                                   child: TextField(
                                     controller: _customNameCtrl,
                                     decoration: InputDecoration(
-                                      hintText: 'Custom garment (e.g. Silk Cushion, Leather Jacket)',
+                                      hintText: 'Garment name (e.g. Silk Cushion, Leather Jacket)',
                                       hintStyle: _T.body(12, c: _P.textMuted),
                                       isDense: true,
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
@@ -2773,7 +3021,8 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
                                     controller: _customPriceCtrl,
                                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                     decoration: InputDecoration(
-                                      hintText: '£ Price',
+                                      prefixText: '£ ',
+                                      hintText: 'Price',
                                       hintStyle: _T.body(12, c: _P.textMuted),
                                       isDense: true,
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
@@ -2785,19 +3034,22 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                OutlinedButton.icon(
+                                ElevatedButton.icon(
                                   onPressed: _addCustomItem,
                                   icon: const Icon(Icons.add_rounded, size: 15),
-                                  label: const Text('Custom'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: _P.navy,
-                                    side: const BorderSide(color: _P.border),
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                                  label: const Text('Add Item'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _P.navy,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                   ),
                                 ),
                               ],
                             ),
+                          ],
+                        ],
+                      ),
                     ),
 
                     const SizedBox(height: 20),
