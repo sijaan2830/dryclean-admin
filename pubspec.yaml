@@ -1,0 +1,56 @@
+name: admin_panel
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase dependencies (compatible versions)
+  firebase_core: ^4.7.0
+  firebase_auth: ^6.4.0
+  cloud_firestore: ^6.3.0
+  firebase_storage: ^13.3.0
+
+  # UI dependencies
+  cupertino_icons: ^1.0.8
+  google_fonts: ^8.0.2
+
+  # State management
+  provider: ^6.1.1
+
+  # Reactive streams
+  rxdart: ^0.28.0
+
+  # Image picker
+  image_picker: ^1.0.7
+
+  # Charts and data visualization
+  fl_chart: ^1.2.0
+
+  # Date formatting
+  intl: ^0.20.2
+  
+  # FCM Authentication & Messaging
+  http: ^1.1.0
+  flutter_map: 8.2.2
+  latlong2: 0.9.1
+  url_launcher: ^6.3.3
+  cloud_functions: ^6.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/services/

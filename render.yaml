@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: dryclean-admin
+    runtime: static
+    buildCommand: bash render-build.sh
+    staticPublishPath: build/web
+    headers:
+      - path: /*
+        name: Access-Control-Allow-Origin
+        value: "*"
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
