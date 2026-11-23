@@ -811,6 +811,13 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                                     style: _T.heading(15)),
                                 if (isPrepaid)
                                   _Chip(label: 'PREPAID', color: _P.violet, bg: _P.violetBg),
+                                Builder(builder: (_) {
+                                  final rawSrc = (widget.order['source'] ?? '').toString().toLowerCase();
+                                  final isWebOrder = rawSrc.contains('web') || (widget.order['type'] == 'website');
+                                  return isWebOrder
+                                      ? _Chip(label: '🌐 WEB ORDER', color: _P.teal, bg: _P.tealBg)
+                                      : _Chip(label: '📱 APP ORDER', color: const Color(0xFF6366F1), bg: const Color(0xFFEEF2FF));
+                                }),
                                 _StatusBadge(status: status),
                               ],
                             ),
@@ -1773,21 +1780,85 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                 ),
               ),
 
-              // Bottom Actions
+              // Bottom Actions: 3 Print Formats (A4, 80mm Thermal, 58mm Thermal)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 decoration: const BoxDecoration(
                   color: Color(0xFFF8FAFC),
                   border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     TextButton(
                       onPressed: () => Navigator.of(dialogCtx).pop(),
                       child: const Text('Close'),
                     ),
-                    const SizedBox(width: 12),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        final html = _buildThermalReceipt58mmHtml(
+                          orderId: orderId,
+                          customerName: customerName,
+                          phone: phone,
+                          addressStr: addressStr,
+                          colDate: colDate,
+                          delDate: delDate,
+                          statusLabel: status.label,
+                          items: items,
+                          totalAmount: totalAmount,
+                          paymentMethod: paymentMethod,
+                        );
+                        printInvoiceHtml(html);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Printing 58mm Thermal Receipt (2")...'),
+                            backgroundColor: Color(0xFF334155),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.receipt_rounded, size: 16),
+                      label: const Text('58mm Receipt (2")'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF334155),
+                        side: const BorderSide(color: Color(0xFFCBD5E1)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        final html = _buildThermalReceipt80mmHtml(
+                          orderId: orderId,
+                          customerName: customerName,
+                          phone: phone,
+                          addressStr: addressStr,
+                          colDate: colDate,
+                          delDate: delDate,
+                          statusLabel: status.label,
+                          items: items,
+                          totalAmount: totalAmount,
+                          paymentMethod: paymentMethod,
+                        );
+                        printInvoiceHtml(html);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Printing 80mm POS Thermal Receipt (3")...'),
+                            backgroundColor: Color(0xFF0D9488),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.print_rounded, size: 16),
+                      label: const Text('80mm POS Roll (3")'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0D9488),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      ),
+                    ),
                     ElevatedButton.icon(
                       onPressed: () {
                         final html = _buildInvoiceHtml(
@@ -1806,19 +1877,18 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                         printInvoiceHtml(html);
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Opening printable invoice...'),
+                            content: Text('Opening printable A4 Tax Invoice...'),
                             backgroundColor: Color(0xFF0E3AA8),
                             behavior: SnackBarBehavior.floating,
                           ),
                         );
                       },
-                      icon: const Icon(Icons.print_rounded, size: 18),
-                      label: const Text('Print / Save PDF'),
+                      icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
+                      label: const Text('A4 Tax Invoice'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0E3AA8),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                       ),
                     ),
                   ],
@@ -1896,8 +1966,8 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
       line-height: 1.45;
     }
     .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 18px; border-bottom: 2px solid #E2E8F0; }
-    .brand-title { font-family: 'Satisfy', cursive; font-size: 32px; color: #0E3AA8; font-weight: 700; margin: 0; }
-    .brand-sub { font-size: 9.5px; font-weight: 800; letter-spacing: 1.5px; color: #0F9F90; margin-top: 2px; }
+    .brand-title { font-family: 'Satisfy', cursive; font-size: 32px; color: #0E3AA8; font-weight: 700; margin: 0; line-height: 1.1; }
+    .brand-sub { font-size: 9.5px; font-weight: 800; letter-spacing: 1.5px; color: #10B981; margin-top: 4px; text-transform: uppercase; }
     .brand-meta { font-size: 11px; color: #64748B; margin-top: 6px; line-height: 1.4; }
     .invoice-tag { background: #EEF2FF; color: #0E3AA8; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 6px; display: inline-block; }
     .meta-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; margin: 18px 0; display: flex; gap: 20px; }
@@ -1925,18 +1995,24 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
 <body>
   <div class="header">
     <div>
-      <div style="display: flex; align-items: center; gap: 10px;">
-        <div style="background: #0E3AA8; color: white; font-weight: 900; font-size: 18px; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;">DC+</div>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <svg width="44" height="44" viewBox="0 0 100 100" fill="none">
+          <rect width="100" height="100" rx="22" fill="#0E3AA8"/>
+          <circle cx="44" cy="52" r="24" fill="#10B981" fill-opacity="0.35"/>
+          <path d="M35 42 Q45 28 55 42 Q59 60 45 68 Q31 60 35 42 Z" fill="#10B981"/>
+          <rect x="62" y="26" width="8" height="24" rx="4" fill="#EF4444"/>
+          <rect x="54" y="34" width="24" height="8" rx="4" fill="#EF4444"/>
+        </svg>
         <div>
-          <h1 class="brand-title">DryClean Plus</h1>
-          <div class="brand-sub">PREMIUM TEXTILE & GARMENT CARE</div>
+          <h1 class="brand-title">DryClean <span style="color: #EF4444; font-family: sans-serif; font-weight: 900;">+</span></h1>
+          <div class="brand-sub"><span style="color: #10B981;">●</span> ECO TEXTILE & GARMENT CARE</div>
         </div>
       </div>
       <div class="brand-meta">DryClean Plus Ltd · London, United Kingdom<br>support@drycleanplus.co.uk · www.drycleanplus.co.uk</div>
     </div>
     <div style="text-align: right;">
-      <div class="invoice-tag">OFFICIAL INVOICE</div>
-      <div style="font-size: 14px; font-weight: 800; color: #0F172A; margin-top: 6px;">INV-\$orderId</div>
+      <div class="invoice-tag">OFFICIAL TAX INVOICE</div>
+      <div style="font-size: 15px; font-weight: 800; color: #0F172A; margin-top: 6px;">INV-\$orderId</div>
       <div style="font-size: 11px; color: #64748B; margin-top: 2px;">\$dateStr</div>
       <div style="font-size: 11px; font-weight: 700; color: #0E3AA8; margin-top: 4px;">Status: \$statusLabel</div>
     </div>
@@ -2000,6 +2076,226 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
     <div class="footer-script">Thank you for trusting DryClean Plus! · London's Premier Laundry Partner</div>
     <div class="footer-sub">For queries or amends, contact support@drycleanplus.co.uk · DryClean Plus Ltd</div>
   </div>
+</body>
+</html>''';
+  }
+
+  // ── 80mm (3-inch) POS Thermal Receipt Format ────────────────────────────────
+  String _buildThermalReceipt80mmHtml({
+    required String orderId,
+    required String customerName,
+    required String phone,
+    required String addressStr,
+    required String colDate,
+    required String delDate,
+    required String statusLabel,
+    required List<Map<String, dynamic>> items,
+    required String totalAmount,
+    required String paymentMethod,
+  }) {
+    final dateStr = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+    final StringBuffer rows = StringBuffer();
+    int totalCount = 0;
+
+    if (items.isEmpty) {
+      rows.write('''
+        <tr>
+          <td colspan="3" style="text-align: center; padding: 6px 0; font-style: italic; font-size: 11px;">
+            Standard Bag Service (Itemized at facility)
+          </td>
+        </tr>
+      ''');
+    } else {
+      for (final itm in items) {
+        final name = itm['itemType'] ?? itm['name'] ?? 'Garment';
+        final qty = (itm['quantity'] as num?)?.toInt() ?? (itm['qty'] as num?)?.toInt() ?? 1;
+        final p = (itm['unitPrice'] as num?)?.toDouble() ?? _parsePrice(itm['price']);
+        totalCount += qty;
+        final rowTotal = (p * qty).toStringAsFixed(2);
+        rows.write('''
+          <tr>
+            <td style="padding: 3px 0; font-weight: 700;">\$name <span style="font-weight: 400; font-size: 10px;">(x\$qty)</span></td>
+            <td style="padding: 3px 0; text-align: right; font-weight: 700;">£\$rowTotal</td>
+          </tr>
+        ''');
+      }
+    }
+
+    return '''<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Receipt #\$orderId (80mm)</title>
+  <style>
+    @page { size: 80mm auto; margin: 3mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Courier New", Courier, monospace, sans-serif;
+      color: #000;
+      background: #FFF;
+      margin: 0;
+      padding: 4px;
+      width: 74mm;
+      font-size: 12px;
+      line-height: 1.3;
+    }
+    .center { text-align: center; }
+    .bold { font-weight: 800; }
+    .cut-line { border-bottom: 1px dashed #000; margin: 6px 0; }
+    .double-line { border-bottom: 2px solid #000; margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    .row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+  </style>
+</head>
+<body>
+  <div class="center">
+    <div style="font-size: 18px; font-weight: 900; letter-spacing: 1px;">DRYCLEAN PLUS</div>
+    <div style="font-size: 10px; font-weight: 700; margin-top: 1px;">LONDON PREMIER LAUNDRY CARE</div>
+    <div style="font-size: 9px; margin-top: 2px;">www.drycleanplus.co.uk · 01636918181</div>
+    <div class="cut-line"></div>
+    <div style="font-size: 15px; font-weight: 900; margin: 4px 0;">ORDER #\$orderId</div>
+    <div style="font-size: 10px;">\$dateStr · Status: \$statusLabel</div>
+  </div>
+
+  <div class="cut-line"></div>
+
+  <div style="font-size: 11px;">
+    <div class="row"><span class="bold">Customer:</span><span>\$customerName</span></div>
+    <div class="row"><span class="bold">Phone:</span><span>\$phone</span></div>
+    <div style="font-size: 10px; margin-top: 2px; word-break: break-word;"><span class="bold">Address:</span> \$addressStr</div>
+  </div>
+
+  <div class="cut-line"></div>
+
+  <div style="font-size: 11px;">
+    <div class="row"><span>Collection:</span><span class="bold">\$colDate</span></div>
+    <div class="row"><span>Delivery:</span><span class="bold">\$delDate</span></div>
+  </div>
+
+  <div class="double-line"></div>
+
+  <div style="font-size: 10px; font-weight: 800; margin-bottom: 4px;">ITEMIZED GARMENTS</div>
+  <table>
+    <tbody>
+      \$rows
+    </tbody>
+  </table>
+
+  <div class="double-line"></div>
+
+  <div class="row" style="font-size: 12px;"><span>Total Garments:</span><span class="bold">\$totalCount items</span></div>
+  <div class="row" style="font-size: 12px;"><span>Delivery & Collection:</span><span class="bold">FREE</span></div>
+  <div class="cut-line"></div>
+  <div class="row" style="font-size: 16px; font-weight: 900;">
+    <span>TOTAL DUE:</span>
+    <span>£\$totalAmount</span>
+  </div>
+  <div class="row" style="font-size: 10px; margin-top: 4px;"><span>Payment:</span><span>\$paymentMethod</span></div>
+
+  <div class="cut-line"></div>
+
+  <div class="center" style="font-size: 10px; margin-top: 6px;">
+    <div class="bold">Thank you for choosing DryClean Plus!</div>
+    <div style="font-size: 9px; margin-top: 2px;">Pay online: pay.sumup.com/b2c/Q3MO3NEP</div>
+    <div style="margin-top: 6px; font-family: monospace; font-size: 11px; letter-spacing: 2px;">* \$orderId *</div>
+  </div>
+</body>
+</html>''';
+  }
+
+  // ── 58mm (2-inch) Compact Mobile Thermal Format ─────────────────────────────
+  String _buildThermalReceipt58mmHtml({
+    required String orderId,
+    required String customerName,
+    required String phone,
+    required String addressStr,
+    required String colDate,
+    required String delDate,
+    required String statusLabel,
+    required List<Map<String, dynamic>> items,
+    required String totalAmount,
+    required String paymentMethod,
+  }) {
+    final dateStr = DateFormat('dd/MM HH:mm').format(DateTime.now());
+    final StringBuffer rows = StringBuffer();
+    int totalCount = 0;
+
+    for (final itm in items) {
+      final name = itm['itemType'] ?? itm['name'] ?? 'Garment';
+      final qty = (itm['quantity'] as num?)?.toInt() ?? (itm['qty'] as num?)?.toInt() ?? 1;
+      final p = (itm['unitPrice'] as num?)?.toDouble() ?? _parsePrice(itm['price']);
+      totalCount += qty;
+      final rowTotal = (p * qty).toStringAsFixed(2);
+      rows.write('''
+        <div style="display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 2px;">
+          <span style="font-weight: 700; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">\$name (x\$qty)</span>
+          <span style="font-weight: 700;">£\$rowTotal</span>
+        </div>
+      ''');
+    }
+
+    return '''<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Receipt #\$orderId (58mm)</title>
+  <style>
+    @page { size: 58mm auto; margin: 2mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, monospace, sans-serif;
+      color: #000;
+      background: #FFF;
+      margin: 0;
+      padding: 2px;
+      width: 48mm;
+      font-size: 10px;
+      line-height: 1.25;
+    }
+    .center { text-align: center; }
+    .bold { font-weight: 800; }
+    .cut-line { border-bottom: 1px dashed #000; margin: 4px 0; }
+  </style>
+</head>
+<body>
+  <div class="center">
+    <div style="font-size: 14px; font-weight: 900;">DRYCLEAN PLUS</div>
+    <div style="font-size: 8px;">01636918181</div>
+    <div class="cut-line"></div>
+    <div style="font-size: 13px; font-weight: 900;">#\$orderId</div>
+    <div style="font-size: 8.5px;">\$dateStr</div>
+  </div>
+
+  <div class="cut-line"></div>
+
+  <div style="font-size: 9.5px;">
+    <div><b>Cust:</b> \$customerName</div>
+    <div><b>Tel:</b> \$phone</div>
+    <div style="font-size: 8.5px; word-break: break-word;"><b>Addr:</b> \$addressStr</div>
+  </div>
+
+  <div class="cut-line"></div>
+
+  <div style="font-size: 9px;">
+    <div><b>Col:</b> \$colDate</div>
+    <div><b>Del:</b> \$delDate</div>
+  </div>
+
+  <div class="cut-line"></div>
+
+  <div style="font-size: 9px; font-weight: 800; margin-bottom: 2px;">ITEMS (\$totalCount)</div>
+  \$rows
+
+  <div class="cut-line"></div>
+
+  <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 900;">
+    <span>TOTAL:</span>
+    <span>£\$totalAmount</span>
+  </div>
+  <div style="font-size: 8px; margin-top: 2px;">Payment: \$paymentMethod</div>
+
+  <div class="cut-line"></div>
+  <div class="center" style="font-size: 8px; font-weight: 700;">THANK YOU! · DRYCLEAN PLUS</div>
 </body>
 </html>''';
   }

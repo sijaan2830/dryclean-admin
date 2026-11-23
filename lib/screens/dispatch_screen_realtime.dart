@@ -61,11 +61,16 @@ String _ago(DateTime? t) {
   return DateFormat('d MMM').format(t);
 }
 
-/// A driver counts as online only while their app keeps reporting (closed apps never say "offline").
-bool _isOnline(Map<String, dynamic>? loc) {
-  if (loc == null || loc['online'] != true) return false;
-  final at = _date(loc['updatedAt']);
-  return at == null || DateTime.now().difference(at).inMinutes < 20;
+/// A driver counts as online while their app or driver document reports online.
+bool _isOnline(Map<String, dynamic>? loc, [Map<String, dynamic>? driverDoc]) {
+  if (loc != null && loc['online'] == true) {
+    final at = _date(loc['updatedAt']);
+    if (at == null || DateTime.now().difference(at).inMinutes < 60) return true;
+  }
+  if (driverDoc != null) {
+    if (driverDoc['isOnline'] == true || driverDoc['online'] == true) return true;
+  }
+  return false;
 }
 
 DateTime? _created(Object? v) => v is Timestamp ? v.toDate() : v is String ? DateTime.tryParse(v) : null;
@@ -413,6 +418,11 @@ class _DispatchScreenRealtimeState extends State<DispatchScreenRealtime> with Si
           'status': 'active',
           'createdAt': FieldValue.serverTimestamp(),
         });
+        b.set(_db.collection('driver_locations').doc(uid), {
+          'name': res.name,
+          'online': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
       }
       await b.commit();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${res.name} can now sign in to the ${res.role == 'driver' ? 'driver' : 'intake'} app.')));
@@ -711,7 +721,7 @@ class _Team extends StatelessWidget {
           for (final d in drivers)
             Builder(builder: (_) {
               final m = d.data(), loc = fleet[d.id];
-              final online = _isOnline(loc);
+              final online = _isOnline(loc, m);
               final v = _m(m['vehicle']);
               return _MemberRow(
                 name: _s(m['name']).ifEmpty('Driver'),
@@ -936,7 +946,7 @@ class _AssignDialog extends StatefulWidget {
 }
 
 class _AssignDialogState extends State<_AssignDialog> {
-  late QueryDocumentSnapshot<Map<String, dynamic>> _driver = widget.drivers.firstWhere((d) => _isOnline(widget.fleet[d.id]), orElse: () => widget.drivers.first);
+  late QueryDocumentSnapshot<Map<String, dynamic>> _driver = widget.drivers.firstWhere((d) => _isOnline(widget.fleet[d.id], d.data()), orElse: () => widget.drivers.first);
   /// the customer's chosen day (defaults to 48 hours after collection for delivery)
   late final DateTime? _chosen = () {
     final b = _m(widget.order['bookingData']);
@@ -1012,7 +1022,7 @@ class _AssignDialogState extends State<_AssignDialog> {
                 DropdownMenuItem(
                   value: d.id,
                   child: Row(children: [
-                    Container(width: 8, height: 8, decoration: BoxDecoration(color: _isOnline(widget.fleet[d.id]) ? const Color(0xFF22C55E) : _D.faint, shape: BoxShape.circle)),
+                    Container(width: 8, height: 8, decoration: BoxDecoration(color: _isOnline(widget.fleet[d.id], d.data()) ? const Color(0xFF22C55E) : _D.faint, shape: BoxShape.circle)),
                     const SizedBox(width: 8),
                     Text(_s(d.data()['name']).ifEmpty('Driver')),
                   ]),
