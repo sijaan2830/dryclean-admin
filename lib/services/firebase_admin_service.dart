@@ -754,10 +754,10 @@ class FirebaseAdminService {
 
   // Update settings
   Future<void> updateSettings(Map<String, dynamic> settings) async {
-    await _firestore.collection('settings').doc('app').update({
+    await _firestore.collection('settings').doc('app').set({
       ...settings,
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
   }
 
   // Get single document helpers
