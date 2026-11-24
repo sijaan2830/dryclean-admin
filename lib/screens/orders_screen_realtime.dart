@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../providers/firebase_admin_service.dart';
 import '../providers/firebase_auth_provider.dart';
 import '../services/fcm_sender_service.dart';
+import '../services/resend_email_service.dart';
 import '../widgets/responsive.dart';
 import '../utils/printer_helper.dart';
 
@@ -737,6 +738,13 @@ class _OrdersScreenRealtimeState extends State<OrdersScreenRealtime>
                 // Update status in Firestore
                 await adminService.updateOrderStatus(filtered[i]['id'], newStatus);
                 debugPrint('OrdersScreen: Status updated in Firestore');
+
+                // Automated Free Resend Email notifications on status change
+                if (newStatus == 'delivered') {
+                  ResendEmailService.instance.sendDeliveredInvoiceEmail(filtered[i]);
+                } else if (newStatus == 'awaiting_approval') {
+                  ResendEmailService.instance.sendBillApprovalEmail(filtered[i]);
+                }
 
                 // Handle Notifications for Delivered or Cancelled
                 if (newStatus == 'delivered' || newStatus == 'cancelled') {
@@ -2332,6 +2340,44 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                       ),
                     ),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Sending invoice email via Resend...'),
+                            backgroundColor: Color(0xFF1E5FD8),
+                            behavior: SnackBarBehavior.floating,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                        final res = await ResendEmailService.instance.sendDeliveredInvoiceEmail(widget.order);
+                        if (!context.mounted) return;
+                        if (res['success'] == true) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('✓ Official invoice sent to $email via Resend'),
+                              backgroundColor: const Color(0xFF059669),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Could not send email: ${res['error']}'),
+                              backgroundColor: const Color(0xFFDC2626),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.send_rounded, size: 16),
+                      label: const Text('Email Invoice to Customer'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1E5FD8),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -3351,6 +3397,15 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
       });
 
       await batch.commit();
+
+      // Automated Free Resend Email for bill update approval
+      if (needsApproval || newStatus == 'awaiting_approval') {
+        final updatedOrder = Map<String, dynamic>.from(widget.order);
+        updatedOrder['countedItems'] = itemsList;
+        updatedOrder['subtotal'] = subtotal;
+        updatedOrder['totalAmount'] = newTotal;
+        ResendEmailService.instance.sendBillApprovalEmail(updatedOrder);
+      }
 
       if (!mounted) return;
       Navigator.of(context).pop();
