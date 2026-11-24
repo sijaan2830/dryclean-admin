@@ -332,54 +332,180 @@ class _OrdersScreenRealtimeState extends State<OrdersScreenRealtime>
                 await adminService.updateOrderStatus(filtered[i]['id'], newStatus);
                 debugPrint('OrdersScreen: Status updated in Firestore');
 
-                // Handle Notifications for Delivered or Cancelled
-                if (newStatus == 'delivered' || newStatus == 'cancelled') {
-                  final userId = filtered[i]['userId'] as String?;
-                  final orderIdString = filtered[i]['orderId'] as String? ?? 'Order';
-                  
-                  debugPrint('OrdersScreen: Attempting notification for user $userId');
-                  
-                  if (userId != null && userId.isNotEmpty) {
-                    final token = await adminService.getUserFCMToken(userId);
-                    debugPrint('OrdersScreen: FCM Token found: ${token != null ? 'YES' : 'NO'}');
-                    
-                    if (token != null) {
-                      final title = newStatus == 'delivered' ? 'Order Delivered!' : 'Order Cancelled';
-                      final body = newStatus == 'delivered' 
-                          ? 'Your order #$orderIdString has been delivered successfully. Thank you!'
-                          : 'Your order #$orderIdString has been cancelled. Please contact support for help.';
-                      
-                      debugPrint('OrdersScreen: Sending FCM Notification now...');
-                      final result = await fcmService.sendNotification(
-                        title: title,
-                        body: body,
-                        token: token,
-                        data: {
-                          'type': 'order',
-                          'orderId': filtered[i]['id'], // Pass the Firestore Doc ID for deep linking
-                          'displayOrderId': orderIdString, // Human readable ID
-                        },
-                      );
-
-                      debugPrint('OrdersScreen: Notification result success: ${result['success']}');
-
-                      if (result['unregistered'] == true) {
-                        debugPrint('OrdersScreen: FCM token for user $userId is unregistered. Cleaning up.');
-                        await adminService.removeUserFCMToken(userId);
-                      }
-                    } else {
-                      debugPrint('OrdersScreen: No FCM token found for user $userId in Firestore');
-                    }
-                  } else {
-                    debugPrint('OrdersScreen: No userId associated with this order');
-                  }
-                }
+                // Send professional lifecycle notification (FCM + user inbox)
+                await _sendCustomerLifecycleNotification(
+                  adminService: adminService,
+                  fcmService: fcmService,
+                  order: filtered[i],
+                  newStatus: newStatus,
+                );
               },
             ),
           ),
         );
       },
     );
+  }
+}
+
+// ─── Professional Order Lifecycle Notification Helper ────────────────────────
+Future<void> _sendCustomerLifecycleNotification({
+  required FirebaseAdminService adminService,
+  required FCMSenderService fcmService,
+  required Map<String, dynamic> order,
+  required String newStatus,
+}) async {
+  final userId = order['userId'] as String?;
+  final orderIdString = order['orderId'] as String? ?? 'Order';
+  final docId = (order['id'] ?? '').toString();
+
+  if (userId == null || userId.isEmpty) {
+    debugPrint('OrdersScreen: No userId for order $orderIdString');
+    return;
+  }
+
+  String? title;
+  String? body;
+  String category = 'orders';
+  String icon = 'local_shipping';
+
+  switch (newStatus) {
+    case 'confirmed':
+      title = 'Order Confirmed #$orderIdString';
+      body = 'We have confirmed your order. A driver will be assigned for collection.';
+      icon = 'event_available';
+      break;
+
+    case 'pickup_assigned':
+    case 'assigned':
+    case 'driver_assigned':
+      title = 'Driver Assigned 🚐';
+      body = 'A driver has been assigned for your order. Tap to view collection details.';
+      icon = 'person_pin';
+      break;
+
+    case 'pickup_en_route':
+      title = 'Driver On The Way 🚐';
+      body = 'Our collection van is on the way to your address. Track live in app.';
+      icon = 'local_shipping';
+      break;
+
+    case 'pickup_arrived':
+      title = 'Driver Outside 📍';
+      body = 'Our driver has arrived outside your address for garment collection.';
+      icon = 'where_to_vote';
+      break;
+
+    case 'collected':
+    case 'picked_up':
+    case 'at_facility':
+      title = 'Garments Received at Facility 🏢';
+      body = 'Your clothes have arrived safely at our facility for inspection & counting.';
+      icon = 'warehouse';
+      break;
+
+    case 'awaiting_approval':
+      title = 'Action Required: Review Counted Items 👔';
+      body = 'Our team has counted your clothes. Please review and approve your order total.';
+      icon = 'pending_actions';
+      break;
+
+    case 'approved':
+    case 'cleaning':
+    case 'processing':
+    case 'in_progress':
+      title = 'Cleaning In Progress 🧼';
+      body = 'Your garments are being expertly dry cleaned and pressed with premium care.';
+      icon = 'laundry';
+      break;
+
+    case 'quality_check':
+      title = 'Quality Check Passed ✨';
+      body = 'Your clothes have been inspected and are now being packaged for delivery.';
+      icon = 'checkroom';
+      break;
+
+    case 'ready_for_delivery':
+      title = 'Order Ready for Delivery 📦';
+      body = 'Your garments are clean, fresh, and ready for your scheduled delivery.';
+      icon = 'inventory';
+      break;
+
+    case 'out_for_delivery':
+    case 'delivery_en_route':
+      title = 'Out for Delivery 🚀';
+      body = 'Fresh clothes in transit! Our driver is on the way to your door.';
+      icon = 'local_shipping';
+      break;
+
+    case 'delivery_arrived':
+      title = 'Driver Outside for Delivery 📍';
+      body = 'Our driver has arrived outside with your clean garments!';
+      icon = 'where_to_vote';
+      break;
+
+    case 'delivered':
+      title = 'Order Delivered ✨';
+      body = 'Your order #$orderIdString has been delivered successfully. Thank you for choosing DryClean Plus!';
+      icon = 'check_circle';
+      break;
+
+    case 'cancelled':
+      title = 'Order Cancelled';
+      body = 'Your order #$orderIdString has been cancelled. Please contact support for help.';
+      icon = 'cancel';
+      break;
+
+    default:
+      // Skip internal micro-states to prevent noise/spam
+      return;
+  }
+
+  // 1. Send FCM Push Notification
+  try {
+    final token = await adminService.getUserFCMToken(userId);
+    debugPrint('OrdersScreen: Sending FCM to user $userId, Token: ${token != null ? "Found" : "None"}');
+    if (token != null && token.isNotEmpty) {
+      final result = await fcmService.sendNotification(
+        title: title,
+        body: body,
+        token: token,
+        data: {
+          'type': 'order',
+          'orderId': docId,
+          'displayOrderId': orderIdString,
+          'status': newStatus,
+        },
+      );
+      if (result['unregistered'] == true) {
+        debugPrint('OrdersScreen: Removing stale FCM token for user $userId');
+        await adminService.removeUserFCMToken(userId);
+      }
+    }
+  } catch (e) {
+    debugPrint('OrdersScreen: Error sending FCM notification: $e');
+  }
+
+  // 2. Also write notification to user inbox: `users/{userId}/notifications`
+  try {
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('notifications')
+        .add({
+      'title': title,
+      'message': body,
+      'category': category,
+      'icon': icon,
+      'orderDocId': docId,
+      'displayOrderId': orderIdString,
+      'status': newStatus,
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    debugPrint('OrdersScreen: Saved notification to users/$userId/notifications');
+  } catch (e) {
+    debugPrint('OrdersScreen: Error saving notification to user inbox: $e');
   }
 }
 
@@ -2800,10 +2926,12 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
           'itemType': itm.name,
           'name': itm.name,
           'unitPrice': itm.unitPrice,
-          'price': itm.unitPrice.toStringAsFixed(2),
+          'price': itm.unitPrice,
           'quantity': itm.qty,
           'qty': itm.qty,
-          'total': itm.total.toStringAsFixed(2),
+          'total': itm.total,
+          'priceFormatted': itm.unitPrice.toStringAsFixed(2),
+          'totalFormatted': itm.total.toStringAsFixed(2),
         });
       }
 
@@ -2861,6 +2989,25 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
       });
 
       await batch.commit();
+
+      // Send customer notification for garment counts & approval
+      try {
+        final adminService = context.read<FirebaseAdminService>();
+        final fcmService = context.read<FCMSenderService>();
+        await _sendCustomerLifecycleNotification(
+          adminService: adminService,
+          fcmService: fcmService,
+          order: {
+            ...widget.order,
+            'id': widget.order['id'],
+            'userId': widget.order['userId'],
+            'orderId': widget.order['orderId'],
+          },
+          newStatus: newStatus,
+        );
+      } catch (err) {
+        debugPrint('OrdersScreen: Error sending count notification: $err');
+      }
 
       if (!mounted) return;
       Navigator.of(context).pop();
