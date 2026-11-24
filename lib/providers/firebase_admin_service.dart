@@ -4,12 +4,14 @@ import 'package:rxdart/rxdart.dart';
 
 class FirebaseAdminService extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  Stream<List<Map<String, dynamic>>>? _cachedOrdersStream;
 
-  // Real-time stream for all orders
+  // Real-time stream for all orders (cached broadcast so UI filters don't reset listener)
   Stream<List<Map<String, dynamic>>> getOrdersStream() {
+    if (_cachedOrdersStream != null) return _cachedOrdersStream!;
     debugPrint('FirebaseAdminService: Starting orders stream...');
 
-    return _firestore
+    _cachedOrdersStream = _firestore
         .collection('orders')
         .orderBy('createdAt', descending: true)
         .snapshots()
@@ -75,13 +77,21 @@ class FirebaseAdminService extends ChangeNotifier {
         }
 
         return {
+          ...data,
           'id': doc.id,
           'orderId': data['orderId'] ?? '',
           'userId': data['userId'] ?? '',
           'status': data['status'] ?? 'pending',
           'type': data['type'] ?? 'regular',
-          'createdAt': data['createdAt']?.toDate() ?? DateTime.now(),
-          'updatedAt': data['updatedAt']?.toDate(),
+          'createdAt': data['createdAt'] is Timestamp
+              ? (data['createdAt'] as Timestamp).toDate()
+              : DateTime.now(),
+          'updatedAt': data['updatedAt'] is Timestamp
+              ? (data['updatedAt'] as Timestamp).toDate()
+              : null,
+          'deliveredAt': data['deliveredAt'] is Timestamp
+              ? (data['deliveredAt'] as Timestamp).toDate()
+              : data['deliveredAt'],
           'transactionAmount': transactionAmount,
           'transactionId': data['transactionId'] ?? '',
           'paymentMethod': data['paymentMethod'] ?? '',
@@ -89,7 +99,8 @@ class FirebaseAdminService extends ChangeNotifier {
               Map<String, dynamic>.from(data['bookingData'] ?? {}),
         };
       }).where((order) => order != null).cast<Map<String, dynamic>>().toList();
-    });
+    }).asBroadcastStream();
+    return _cachedOrdersStream!;
   }
 
   // Real-time stream for users/customers
@@ -385,9 +396,50 @@ class FirebaseAdminService extends ChangeNotifier {
 
   // ─── Write methods ────────────────────────────────────────────────────────
 
+  static Map<String, String>? _notificationForStatus(String status, String displayOrderId) {
+    final id = displayOrderId.isNotEmpty ? '#$displayOrderId' : 'your order';
+    switch (status.toLowerCase()) {
+      case 'confirmed':
+        return {'title': 'Booking confirmed', 'body': 'Your collection slot for $id is confirmed.', 'theme': 'blue', 'icon': 'event_available'};
+      case 'pickup_assigned':
+        return {'title': 'Driver assigned', 'body': 'A driver has been assigned to collect $id.', 'theme': 'blue', 'icon': 'person_pin'};
+      case 'pickup_en_route':
+        return {'title': 'Driver is on the way', 'body': 'Tap to follow your driver live on the map.', 'theme': 'blue', 'icon': 'local_shipping'};
+      case 'pickup_arrived':
+        return {'title': 'Your driver is outside', 'body': 'Please hand over your bags at the door.', 'theme': 'mint', 'icon': 'where_to_vote'};
+      case 'collected':
+        return {'title': 'Bags collected', 'body': '$id has been collected and is heading to our facility.', 'theme': 'mint', 'icon': 'inventory'};
+      case 'at_facility':
+        return {'title': 'Arrived at our facility', 'body': 'We are checking every item in $id.', 'theme': 'violet', 'icon': 'warehouse'};
+      case 'awaiting_approval':
+        return {'title': 'Please approve your order', 'body': 'Items counted for $id — tap to review & approve before cleaning.', 'theme': 'amber', 'icon': 'pending_actions'};
+      case 'cleaning':
+        return {'title': 'Cleaning started', 'body': '$id is now being eco-cleaned.', 'theme': 'violet', 'icon': 'laundry'};
+      case 'ready_for_delivery':
+        return {'title': 'Ready for delivery', 'body': '$id is cleaned, pressed and packed.', 'theme': 'mint', 'icon': 'checkroom'};
+      case 'delivery_assigned':
+        return {'title': 'Delivery booked', 'body': 'A driver is scheduled to deliver $id.', 'theme': 'blue', 'icon': 'person_pin'};
+      case 'out_for_delivery':
+        return {'title': 'Driver is bringing your order', 'body': 'Tap to follow your driver live on the map.', 'theme': 'blue', 'icon': 'local_shipping'};
+      case 'delivery_arrived':
+        return {'title': 'Your driver is outside', 'body': 'Your clean clothes for $id are at your door.', 'theme': 'mint', 'icon': 'where_to_vote'};
+      case 'delivered':
+        return {'title': 'Delivered — thank you!', 'body': '$id has been delivered. Your receipt is ready.', 'theme': 'mint', 'icon': 'check_circle'};
+      case 'cancelled':
+        return {'title': 'Order cancelled', 'body': '$id has been cancelled. Call us if you need help.', 'theme': 'amber', 'icon': 'cancel'};
+      default:
+        return null;
+    }
+  }
+
   Future<void> updateOrderStatus(String orderId, String newStatus) async {
     try {
       final ref = _firestore.collection('orders').doc(orderId);
+      final snap = await ref.get();
+      final data = snap.data() ?? {};
+      final userId = (data['userId'] ?? '').toString();
+      final displayId = (data['orderId'] ?? '').toString();
+
       final b = _firestore.batch();
       b.update(ref, {
         'status': newStatus,
@@ -396,6 +448,25 @@ class FirebaseAdminService extends ChangeNotifier {
       });
       // Same timeline the driver and intake apps write, so the customer sees every step.
       b.set(ref.collection('history').doc(), {'status': newStatus, 'at': FieldValue.serverTimestamp(), 'byRole': 'admin', 'note': 'Updated in the admin panel'});
+
+      // Also write in-app customer notification directly so it arrives instantaneously without Blaze Cloud Functions
+      final notif = _notificationForStatus(newStatus, displayId);
+      if (notif != null && userId.isNotEmpty && userId != 'website_guest' && userId != 'dummy') {
+        final notifRef = _firestore.collection('users').doc(userId).collection('notifications').doc();
+        b.set(notifRef, {
+          'title': notif['title'],
+          'body': notif['body'],
+          'category': 'orders',
+          'theme': notif['theme'],
+          'icon': notif['icon'],
+          'orderId': orderId,
+          'displayOrderId': displayId,
+          'status': newStatus,
+          'read': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
       await b.commit();
     } catch (e) {
       debugPrint('FirebaseAdminService: Error updating order status: $e');

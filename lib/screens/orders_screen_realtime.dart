@@ -690,7 +690,7 @@ class _OrdersScreenRealtimeState extends State<OrdersScreenRealtime>
     final hPad = isMobile ? 14.0 : 28.0;
 
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: context.watch<FirebaseAdminService>().getOrdersStream(),
+      stream: context.read<FirebaseAdminService>().getOrdersStream(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _buildLoadingState();
@@ -1352,6 +1352,45 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                             icon: Icons.receipt_long_rounded,
                             onTap: _printOrderDetails,
                           ),
+                          _OutlineAction(
+                            label: 'Send Email',
+                            icon: Icons.send_rounded,
+                            onTap: () async {
+                              final email = (bookingData['email'] ?? widget.order['email'] ?? '').toString();
+                              if (email.isEmpty || !email.contains('@')) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('No valid customer email on this order.'),
+                                    backgroundColor: Color(0xFFDC2626),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                                return;
+                              }
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Sending invoice & PDF to $email...'),
+                                  backgroundColor: const Color(0xFF1E5FD8),
+                                  behavior: SnackBarBehavior.floating,
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                              final statusStr = (widget.order['status'] ?? '').toString().toLowerCase();
+                              final res = statusStr == 'awaiting_approval'
+                                  ? await ResendEmailService.instance.sendBillApprovalEmail(widget.order)
+                                  : await ResendEmailService.instance.sendDeliveredInvoiceEmail(widget.order);
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(res['success'] == true
+                                      ? '✓ Invoice & PDF emailed to $email'
+                                      : 'Could not send email: ${res['error'] ?? 'Check connection'}'),
+                                  backgroundColor: res['success'] == true ? const Color(0xFF059669) : const Color(0xFFDC2626),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            },
+                          ),
                           ElevatedButton.icon(
                             onPressed: () => _openItemizeModal(context, widget.order, bookingData),
                             icon: const Icon(Icons.edit_note_rounded, size: 17),
@@ -1964,7 +2003,7 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // 1. Signature Brand Header
+                        // 1. Signature Brand Header (Signature Logo Only, No Icon Box)
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -1972,45 +2011,40 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
-                                    Container(
-                                      width: 44,
-                                      height: 44,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF0E3AA8),
-                                        borderRadius: BorderRadius.circular(12),
+                                    Text(
+                                      'Dryclean ',
+                                      style: GoogleFonts.satisfy(
+                                        fontSize: 30,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFF1B5E20),
                                       ),
-                                      alignment: Alignment.center,
-                                      child: const Text('DC+', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
                                     ),
-                                    const SizedBox(width: 12),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'DryClean Plus',
-                                          style: GoogleFonts.satisfy(
-                                            fontSize: 28,
-                                            fontWeight: FontWeight.w700,
-                                            color: const Color(0xFF0E3AA8),
-                                          ),
-                                        ),
-                                        Text(
-                                          'PREMIUM TEXTILE & GARMENT CARE',
-                                          style: GoogleFonts.plusJakartaSans(
-                                            fontSize: 9.5,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: 1.2,
-                                            color: const Color(0xFF0F9F90),
-                                          ),
-                                        ),
-                                      ],
+                                    Text(
+                                      'Plus',
+                                      style: GoogleFonts.satisfy(
+                                        fontSize: 30,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFFEF4444),
+                                      ),
                                     ),
+                                    Text(
+                                      '+',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w900,
+                                        color: const Color(0xFFEF4444),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.auto_awesome, size: 15, color: Color(0xFFFACC15)),
                                   ],
                                 ),
-                                const SizedBox(height: 8),
-                                Text('DryClean Plus Ltd · London, UK\nsupport@drycleanplus.co.uk · www.drycleanplus.co.uk',
-                                    style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF64748B), height: 1.4)),
+                                const SizedBox(height: 6),
+                                Text('DryClean Plus Ltd\nsupport@drycleanplus.co.uk · www.drycleanplus.co.uk',
+                                    style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF64748B), height: 1.45)),
                               ],
                             ),
                             const Spacer(),
@@ -2401,14 +2435,18 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
     required String totalAmount,
     required String paymentMethod,
   }) {
-    final dateStr = DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now());
+    final dateStr = DateFormat('dd MMM yyyy').format(DateTime.now());
     final StringBuffer rows = StringBuffer();
+    double itemsSum = 0.0;
     if (items.isEmpty) {
       rows.write('''
         <tr>
-          <td colspan="6" style="text-align: center; color: #64748B; padding: 20px; font-style: italic;">
-            Standard Bag Service · Garments counted & itemized at facility
-          </td>
+          <td>1</td>
+          <td>Dry Cleaning &amp; Laundry Service</td>
+          <td>Standard Bag</td>
+          <td>1</td>
+          <td>£$totalAmount</td>
+          <td style="font-weight: bold;">£$totalAmount</td>
         </tr>
       ''');
     } else {
@@ -2418,150 +2456,286 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
         final cat = itm['category'] ?? 'General';
         final qty = (itm['quantity'] as num?)?.toInt() ?? (itm['qty'] as num?)?.toInt() ?? 1;
         final p = (itm['unitPrice'] as num?)?.toDouble() ?? _parsePrice(itm['price']);
-        final rowTotal = (p * qty).toStringAsFixed(2);
+        final lineVal = p * qty;
+        itemsSum += lineVal;
+        final rowTotal = lineVal.toStringAsFixed(2);
         rows.write('''
           <tr>
-            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; font-weight: 600;">\${i + 1}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #0F172A;">\$name</td>
-            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; color: #64748B;">\$cat</td>
-            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: center; font-weight: 600;">\$qty</td>
-            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right;">£\${p.toStringAsFixed(2)}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #E2E8F0; text-align: right; font-weight: 800; color: #0E3AA8;">£\$rowTotal</td>
+            <td>\${i + 1}</td>
+            <td style="font-weight: 600;">\$name</td>
+            <td>\$cat</td>
+            <td>\$qty</td>
+            <td>£\${p.toStringAsFixed(2)}</td>
+            <td style="font-weight: bold;">£\$rowTotal</td>
           </tr>
         ''');
       }
     }
 
+    final totalDouble = double.tryParse(totalAmount.replaceAll(RegExp(r'[^0-9.]'), '')) ?? itemsSum;
+    final subtotalStr = itemsSum > 0 ? itemsSum.toStringAsFixed(2) : totalDouble.toStringAsFixed(2);
+    final totalStr = totalDouble.toStringAsFixed(2);
+
     return '''<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Invoice #INV-\$orderId · DryClean Plus</title>
+  <meta name="viewport" content="width=860">
+  <title>Invoice INV-\$orderId, DryClean Plus</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Satisfy&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Satisfy&display=swap" rel="stylesheet">
   <style>
-    @page { size: A4 portrait; margin: 12mm 14mm; }
+    @page { size: A4 portrait; margin: 14mm 16mm; }
     * { box-sizing: border-box; }
+
+    /* Screen: crisp white A4 sheet */
     body {
-      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      color: #0F172A;
       margin: 0;
-      padding: 24px;
-      background: #FFFFFF;
+      padding: 36px 0 48px;
+      background: #F4F6F9;
+      color: #374151;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       font-size: 13px;
-      line-height: 1.45;
+      line-height: 1.5;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 18px; border-bottom: 2px solid #E2E8F0; }
-    .brand-title { font-family: 'Satisfy', cursive; font-size: 32px; color: #0E3AA8; font-weight: 700; margin: 0; line-height: 1.1; }
-    .brand-sub { font-size: 9.5px; font-weight: 800; letter-spacing: 1.5px; color: #10B981; margin-top: 4px; text-transform: uppercase; }
-    .brand-meta { font-size: 11px; color: #64748B; margin-top: 6px; line-height: 1.4; }
-    .invoice-tag { background: #EEF2FF; color: #0E3AA8; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 6px; display: inline-block; }
-    .meta-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; margin: 18px 0; display: flex; gap: 20px; }
-    .meta-col { flex: 1; }
-    .meta-label { font-size: 10px; font-weight: 800; color: #64748B; letter-spacing: 0.8px; margin-bottom: 4px; }
-    .meta-val { font-size: 12.5px; color: #334155; }
-    .meta-bold { font-size: 13.5px; font-weight: 700; color: #0F172A; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 18px; }
-    th { background: #F1F5F9; color: #475569; font-size: 11px; font-weight: 800; text-align: left; padding: 10px; border-bottom: 2px solid #CBD5E1; text-transform: uppercase; letter-spacing: 0.5px; }
-    .financials { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 14px; }
-    .payment-box { width: 52%; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 16px; }
-    .totals-box { width: 42%; }
-    .tot-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; color: #64748B; }
-    .tot-bold { color: #0F172A; font-weight: 600; }
-    .tot-due { font-size: 16px; font-weight: 800; color: #0F172A; border-top: 2px solid #CBD5E1; padding-top: 8px; margin-top: 8px; display: flex; justify-content: space-between; }
-    .tot-due-val { font-size: 20px; font-weight: 900; color: #0E3AA8; }
-    .footer { margin-top: 36px; text-align: center; border-top: 1px solid #E2E8F0; padding-top: 16px; }
-    .footer-script { font-family: 'Satisfy', cursive; font-size: 18px; color: #0E3AA8; }
-    .footer-sub { font-size: 11px; color: #94A3B8; margin-top: 4px; }
+
+    .page {
+      width: 210mm;
+      margin: 0 auto;
+      background: #FFFFFF;
+      box-shadow:
+        0 0 0 1px rgba(15, 23, 42, 0.06),
+        0 2px 4px rgba(15, 23, 42, 0.08),
+        0 18px 40px rgba(15, 23, 42, 0.14);
+    }
+
+    .frame { width: 100%; height: 297mm; border-collapse: separate; border-spacing: 0; }
+    .frame td { padding: 0; vertical-align: top; }
+    .frame .band td { height: 4px; border-top: 4px solid #0B2A6B; font-size: 0; line-height: 0; }
+    .frame tr.fill td { height: 100%; }
+    .frame td.r-head { padding: 10mm 17mm 0; }
+    .frame td.r-meta { padding: 9mm 17mm 0; }
+    .frame td.r-items { padding: 8mm 17mm 0; }
+    .frame td.r-summary { padding: 7mm 17mm 0; }
+    .frame td.r-foot { padding: 0 17mm 13mm; vertical-align: bottom; }
+
+    table { border-collapse: collapse; }
+    .layout { width: 100%; }
+    .layout td { padding: 0; vertical-align: top; }
+
+    .label { font-size: 11.5px; color: #6B7280; margin-bottom: 3px; }
+    .strong { font-weight: bold; color: #111827; }
+    .ink { color: #111827; }
+    .muted { color: #6B7280; }
+
+    /* Signature Wordmark Only (matching website DrycleanPlusLogo) */
+    .wordmark {
+      font-family: 'Satisfy', 'Brush Script MT', 'Segoe Script', cursive, Georgia, serif;
+      font-size: 30px;
+      font-weight: bold;
+      font-style: italic;
+      line-height: 1.15;
+      margin-bottom: 8px;
+      white-space: nowrap;
+    }
+    .wordmark .g { color: #1B5E20; }
+    .wordmark .r { color: #EF4444; margin-left: 3px; }
+    .wordmark .p { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; font-size: 22px; font-weight: 900; font-style: normal; color: #EF4444; margin-left: 2px; }
+    .wordmark .s { color: #FACC15; font-size: 15px; font-style: normal; margin-left: 4px; vertical-align: middle; }
+
+    .company { font-size: 12px; line-height: 1.6; color: #6B7280; }
+    .doc-title { font-family: Georgia, 'Times New Roman', serif; font-size: 30px; line-height: 1.1; color: #111827; text-align: right; margin-bottom: 10px; }
+    .kv { margin-left: auto; }
+    .kv td { padding: 2px 0 2px 18px; font-size: 12.5px; line-height: 1.5; vertical-align: top; }
+    .kv td.k { color: #6B7280; text-align: right; }
+    .kv td.v { color: #111827; font-weight: bold; text-align: right; }
+
+    /* Customer and schedule */
+    .meta { border-top: 1px solid #E3E6EB; border-bottom: 1px solid #E3E6EB; }
+    .meta td.left { width: 54%; padding: 16px 20px 18px 0; }
+    .meta td.right { width: 46%; padding: 16px 0 18px 22px; border-left: 1px solid #E3E6EB; }
+    .meta .line { font-size: 13px; line-height: 1.55; color: #374151; }
+    .meta .when { margin-bottom: 10px; }
+
+    /* Items */
+    .items { width: 100%; }
+    .items thead { display: table-header-group; }
+    .items tr { page-break-inside: avoid; break-inside: avoid; }
+    .items th {
+      padding: 0 8px 9px;
+      border-bottom: 1px solid #0B2A6B;
+      font-size: 12px;
+      font-weight: bold;
+      color: #0B2A6B;
+      text-align: left;
+    }
+    .items tbody td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #E3E6EB;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #111827;
+      vertical-align: top;
+    }
+    .items th:nth-child(1), .items td:nth-child(1) { width: 34px; padding-left: 0; text-align: left; }
+    .items th:nth-child(4), .items td:nth-child(4) { width: 52px; text-align: center; }
+    .items th:nth-child(5), .items td:nth-child(5) { width: 96px; text-align: right; }
+    .items th:nth-child(6), .items td:nth-child(6) { width: 96px; padding-right: 0; text-align: right; }
+    .items td:nth-child(3) { color: #6B7280; }
+
+    /* Payment and totals */
+    .summary { page-break-inside: avoid; break-inside: avoid; }
+    .summary td.pay { width: 52%; padding-right: 28px; }
+    .summary td.sum { width: 48%; }
+    .pay .line { font-size: 13px; line-height: 1.55; color: #374151; }
+    .pay a { color: #0B2A6B; word-break: break-all; }
+    .totals { width: 100%; }
+    .totals td { padding: 4px 0; font-size: 13px; color: #6B7280; }
+    .totals td.n { text-align: right; color: #111827; }
+    .totals tr.grand td { padding-top: 14px; border-top: 2px solid #0B2A6B; }
+    .totals tr.grand td.k { font-size: 14px; font-weight: bold; color: #111827; vertical-align: middle; }
+    .totals tr.grand td.n { font-family: Georgia, 'Times New Roman', serif; font-size: 26px; line-height: 1.2; color: #0B2A6B; }
+    .spacer td { padding-bottom: 10px !important; }
+
+    /* Footer */
+    .footer { padding-top: 16px; border-top: 1px solid #E3E6EB; page-break-inside: avoid; break-inside: avoid; }
+    .footer p { margin: 0 0 6px; font-size: 12px; line-height: 1.6; color: #6B7280; }
+    .footer p.thanks { font-size: 13px; color: #111827; }
+
     @media print {
-      body { padding: 0; }
+      body { padding: 0; background: #FFFFFF; }
+      .page { width: auto; margin: 0; box-shadow: none; }
+      .frame { height: 267mm; }
+      .frame td.r-head, .frame td.r-meta, .frame td.r-items, .frame td.r-summary, .frame td.r-foot { padding-left: 0; padding-right: 0; }
+      .frame td.r-foot { padding-bottom: 0; }
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div>
-      <div style="display: flex; align-items: center; gap: 12px;">
-        <svg width="44" height="44" viewBox="0 0 100 100" fill="none">
-          <rect width="100" height="100" rx="22" fill="#0E3AA8"/>
-          <circle cx="44" cy="52" r="24" fill="#10B981" fill-opacity="0.35"/>
-          <path d="M35 42 Q45 28 55 42 Q59 60 45 68 Q31 60 35 42 Z" fill="#10B981"/>
-          <rect x="62" y="26" width="8" height="24" rx="4" fill="#EF4444"/>
-          <rect x="54" y="34" width="24" height="8" rx="4" fill="#EF4444"/>
-        </svg>
-        <div>
-          <h1 class="brand-title">DryClean <span style="color: #EF4444; font-family: sans-serif; font-weight: 900;">+</span></h1>
-          <div class="brand-sub"><span style="color: #10B981;">●</span> ECO TEXTILE & GARMENT CARE</div>
-        </div>
-      </div>
-      <div class="brand-meta">DryClean Plus Ltd · London, United Kingdom<br>support@drycleanplus.co.uk · www.drycleanplus.co.uk</div>
-    </div>
-    <div style="text-align: right;">
-      <div class="invoice-tag">OFFICIAL TAX INVOICE</div>
-      <div style="font-size: 15px; font-weight: 800; color: #0F172A; margin-top: 6px;">INV-\$orderId</div>
-      <div style="font-size: 11px; color: #64748B; margin-top: 2px;">\$dateStr</div>
-      <div style="font-size: 11px; font-weight: 700; color: #0E3AA8; margin-top: 4px;">Status: \$statusLabel</div>
-    </div>
-  </div>
+  <div class="page">
+    <table class="frame" role="presentation">
 
-  <div class="meta-box">
-    <div class="meta-col">
-      <div class="meta-label">CUSTOMER DETAILS</div>
-      <div class="meta-bold">\$customerName</div>
-      <div class="meta-val">Phone: \$phone</div>
-      <div class="meta-val">Email: \$email</div>
-      <div class="meta-val" style="margin-top: 4px;">Address: \$addressStr</div>
-    </div>
-    <div style="width: 1px; background: #CBD5E1;"></div>
-    <div class="meta-col">
-      <div class="meta-label">SCHEDULE & LOGISTICS</div>
-      <div style="font-size: 11px; font-weight: 700; color: #0E3AA8;">Collection Slot:</div>
-      <div class="meta-val" style="margin-bottom: 6px;">\$colDate</div>
-      <div style="font-size: 11px; font-weight: 700; color: #10B981;">Delivery Slot:</div>
-      <div class="meta-val">\$delDate</div>
-    </div>
-  </div>
+      <tr class="band"><td></td></tr>
 
-  <div style="font-size: 11px; font-weight: 800; color: #0F172A; text-transform: uppercase; letter-spacing: 0.6px;">INVOICED GARMENTS & SERVICES</div>
-  <table>
-    <thead>
+      <!-- Header -->
       <tr>
-        <th style="width: 35px;">#</th>
-        <th>Item / Garment</th>
-        <th>Category</th>
-        <th style="text-align: center; width: 50px;">Qty</th>
-        <th style="text-align: right; width: 90px;">Unit Price</th>
-        <th style="text-align: right; width: 90px;">Total</th>
+        <td class="r-head">
+          <table class="layout">
+            <tr>
+              <td>
+                <div class="wordmark">
+                  <span class="g">Dryclean</span><span class="r">Plus</span><span class="p">+</span><span class="s">&#10022;</span>
+                </div>
+                <div class="company">
+                  DryClean Plus Ltd<br>
+                  support@drycleanplus.co.uk<br>
+                  www.drycleanplus.co.uk
+                </div>
+              </td>
+              <td style="text-align: right;">
+                <div class="doc-title">Invoice</div>
+                <table class="kv">
+                  <tr><td class="k">Invoice number</td><td class="v">INV-\$orderId</td></tr>
+                  <tr><td class="k">Date</td><td class="v">\$dateStr</td></tr>
+                  <tr><td class="k">Status</td><td class="v">\$statusLabel</td></tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
       </tr>
-    </thead>
-    <tbody>
-      \$rows
-    </tbody>
-  </table>
 
-  <div class="financials">
-    <div class="payment-box">
-      <div class="meta-label">PAYMENT & METHOD</div>
-      <div style="font-size: 12px; font-weight: 700; color: #0E3AA8; margin-bottom: 4px;">Payment Mode: \$paymentMethod</div>
-      <div style="font-size: 11px; color: #64748B; line-height: 1.4;">
-        SumUp Official Payment Link:<br>
-        <strong style="color: #0E3AA8;">https://pay.sumup.com/b2c/Q3MO3NEP</strong>
-      </div>
-    </div>
-    <div class="totals-box">
-      <div class="tot-row"><span>Subtotal:</span><span class="tot-bold">£\$totalAmount</span></div>
-      <div class="tot-row"><span>Collection & Delivery:</span><span class="tot-bold" style="color: #10B981;">FREE</span></div>
-      <div class="tot-due">
-        <span>Total Due:</span>
-        <span class="tot-due-val">£\$totalAmount</span>
-      </div>
-    </div>
-  </div>
+      <!-- Customer and schedule -->
+      <tr>
+        <td class="r-meta">
+          <table class="layout meta">
+            <tr>
+              <td class="left">
+                <div class="label">Billed to</div>
+                <div class="line strong">\$customerName</div>
+                <div class="line">\$phone</div>
+                <div class="line">\$email</div>
+                <div class="line">\$addressStr</div>
+              </td>
+              <td class="right">
+                <div class="when">
+                  <div class="label">Collection</div>
+                  <div class="line ink">\$colDate</div>
+                </div>
+                <div>
+                  <div class="label">Delivery</div>
+                  <div class="line ink">\$delDate</div>
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
 
-  <div class="footer">
-    <div class="footer-script">Thank you for trusting DryClean Plus! · London's Premier Laundry Partner</div>
-    <div class="footer-sub">For queries or amends, contact support@drycleanplus.co.uk · DryClean Plus Ltd</div>
+      <!-- Items -->
+      <tr>
+        <td class="r-items">
+          <table class="items">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Item</th>
+                <th>Category</th>
+                <th>Qty</th>
+                <th>Unit price</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              \$rows
+            </tbody>
+          </table>
+        </td>
+      </tr>
+
+      <!-- Payment and totals -->
+      <tr>
+        <td class="r-summary">
+          <table class="layout summary">
+            <tr>
+              <td class="pay">
+                <div class="label">Payment</div>
+                <div class="line ink">\$paymentMethod</div>
+                <div class="line" style="margin-top: 8px;">
+                  Pay online with SumUp:<br>
+                  <a href="https://pay.sumup.com/b2c/Q3MO3NEP">https://pay.sumup.com/b2c/Q3MO3NEP</a>
+                </div>
+              </td>
+              <td class="sum">
+                <table class="totals">
+                  <tr><td>Subtotal</td><td class="n">£\$subtotalStr</td></tr>
+                  <tr class="spacer"><td>Collection and delivery</td><td class="n">Free</td></tr>
+                  <tr class="grand"><td class="k">Total</td><td class="n">£\$totalStr</td></tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <!-- Filler -->
+      <tr class="fill"><td></td></tr>
+
+      <!-- Footer -->
+      <tr>
+        <td class="r-foot">
+          <div class="footer">
+            <p class="thanks">Thank you for choosing DryClean Plus.</p>
+            <p>Questions about this invoice? Email support@drycleanplus.co.uk or call +44 7424 866802.</p>
+            <p>DryClean Plus Ltd · www.drycleanplus.co.uk</p>
+          </div>
+        </td>
+      </tr>
+
+    </table>
   </div>
 </body>
 </html>''';
@@ -3395,6 +3569,27 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
         'byRole': 'admin',
         'note': historyNote,
       });
+
+      final String customerUid = (widget.order['userId'] ?? '').toString();
+      if (customerUid.isNotEmpty && customerUid != 'website_guest' && customerUid != 'dummy') {
+        final String displayId = (widget.order['orderId'] ?? '').toString();
+        final String idTag = displayId.isNotEmpty ? '#$displayId' : 'your order';
+        final notifRef = FirebaseFirestore.instance.collection('users').doc(customerUid).collection('notifications').doc();
+        batch.set(notifRef, {
+          'title': needsApproval ? 'Please approve your order' : 'Items inspected & priced',
+          'body': needsApproval
+              ? 'We counted $_totalCount item${_totalCount == 1 ? '' : 's'} for $idTag — new total £${newTotal.toStringAsFixed(2)}. Tap to review.'
+              : '$_totalCount item${_totalCount == 1 ? '' : 's'} updated for $idTag — total £${newTotal.toStringAsFixed(2)}.',
+          'category': 'orders',
+          'theme': needsApproval ? 'amber' : 'violet',
+          'icon': needsApproval ? 'pending_actions' : 'warehouse',
+          'orderId': widget.order['id'],
+          'displayOrderId': displayId,
+          'status': newStatus,
+          'read': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
 
       await batch.commit();
 
