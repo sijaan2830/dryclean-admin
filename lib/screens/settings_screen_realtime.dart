@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -553,12 +554,15 @@ class _SettingsScreenRealtimeState extends State<SettingsScreenRealtime> {
 
   Future<void> _updateSetting(String key, dynamic value) async {
     try {
-      await _adminService.updateSettings({key: value});
+      await FirebaseFirestore.instance.collection('settings').doc('app').set({
+        key: value,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Setting updated successfully'),
-            backgroundColor: Colors.green,
+            backgroundColor: Color(0xFF073B1B),
           ),
         );
       }
