@@ -1408,10 +1408,25 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                                   final next = isPaid ? 'pay_on_delivery' : 'paid';
                                   final svc = context.read<FirebaseAdminService>();
                                   await svc.updatePaymentStatus(widget.order['id'].toString(), next);
+                                  bool emailSent = false;
+                                  if (next == 'paid') {
+                                    final email = (bookingData['email'] ?? widget.order['email'] ?? '').toString().trim();
+                                    if (email.isNotEmpty && email.contains('@')) {
+                                      final paidOrder = Map<String, dynamic>.from(widget.order);
+                                      paidOrder['paymentStatus'] = 'paid';
+                                      if ((paidOrder['paymentMethod'] ?? '').toString().toLowerCase() == 'cod') {
+                                        paidOrder['paymentMethod'] = 'Paid';
+                                      }
+                                      final res = await ResendEmailService.instance.sendDeliveredInvoiceEmail(paidOrder);
+                                      emailSent = res['success'] == true;
+                                    }
+                                  }
                                   if (!context.mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text(next == 'paid' ? '✓ Order marked as Paid' : 'Marked as Unpaid'),
+                                      content: Text(next == 'paid'
+                                          ? (emailSent ? '✓ Marked as Paid & receipt emailed' : '✓ Order marked as Paid')
+                                          : 'Marked as Unpaid'),
                                       backgroundColor: next == 'paid' ? const Color(0xFF059669) : const Color(0xFF64748B),
                                       behavior: SnackBarBehavior.floating,
                                     ),
