@@ -116,4 +116,49 @@ class ResendEmailService {
       orderDocId: docId,
     );
   }
+
+  /// 3. Send promotional / first-order offer email (test, first_order, or all customers)
+  Future<Map<String, dynamic>> sendPromoEmail({
+    required String audience, // 'test' | 'first_order' | 'all'
+    String testEmail = '',
+    String testName = 'Sijaan',
+    required String subject,
+    String headline = '',
+    String body1 = '',
+    String body2 = '',
+    String promoCode = '',
+    String ctaText = 'GET 20% OFF MY FIRST ORDER',
+    String ctaUrl = 'https://drycleanplus.co.uk',
+  }) async {
+    try {
+      final res = await http.post(
+        Uri.parse('https://dc-push-service.onrender.com/api/send-promo'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': _apiKey,
+        },
+        body: jsonEncode({
+          'audience': audience,
+          'testEmail': testEmail.trim(),
+          'testName': testName.trim(),
+          'subject': subject.trim(),
+          'headline': headline.trim(),
+          'body1': body1.trim(),
+          'body2': body2.trim(),
+          'promoCode': promoCode.trim(),
+          'ctaText': ctaText.trim(),
+          'ctaUrl': ctaUrl.trim(),
+        }),
+      ).timeout(const Duration(seconds: 60));
+      final body = res.body.isNotEmpty ? jsonDecode(res.body) : {};
+      final ok = res.statusCode >= 200 && res.statusCode < 300;
+      return {
+        'success': ok,
+        if (body is Map) ...body.cast<String, dynamic>(),
+        if (!ok && body is Map && body['error'] != null) 'error': body['error'],
+      };
+    } catch (e) {
+      return {'success': false, 'error': '$e'};
+    }
+  }
 }

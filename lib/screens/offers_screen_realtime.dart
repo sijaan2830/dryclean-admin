@@ -5,6 +5,7 @@ import '../providers/firebase_admin_service.dart';
 import '../widgets/responsive.dart';
 import 'package:intl/intl.dart';
 import '../services/fcm_sender_service.dart';
+import '../services/resend_email_service.dart';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 
@@ -126,7 +127,7 @@ class _OffersScreenRealtimeState extends State<OffersScreenRealtime> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHeader(isMobile, allOffers.length),
+                _buildHeader(isMobile, allOffers.length, allOffers),
                 const SizedBox(height: 20),
                 _buildStatRow(allOffers.length, totalActive, totalExpired),
                 const SizedBox(height: 20),
@@ -147,7 +148,7 @@ class _OffersScreenRealtimeState extends State<OffersScreenRealtime> {
 
   // ── Header ─────────────────────────────────────────────────────────────────
 
-  Widget _buildHeader(bool isMobile, int total) {
+  Widget _buildHeader(bool isMobile, int total, List<Map<String, dynamic>> offers) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -160,18 +161,36 @@ class _OffersScreenRealtimeState extends State<OffersScreenRealtime> {
                 style: _T.body(13)),
           ],
         ),
-        ElevatedButton.icon(
-          onPressed: () => _showOfferDialog(),
-          icon: const Icon(Icons.add_rounded, size: 18),
-          label: Text(isMobile ? 'Add' : 'Add Offer'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _P.azure,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            textStyle: _T.label(13, c: Colors.white),
-          ),
+        Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => _showPromoEmailDialog(offers),
+              icon: const Icon(Icons.mark_email_read_outlined, size: 18),
+              label: Text(isMobile ? 'Email' : 'Promo Email'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _P.azure,
+                side: const BorderSide(color: _P.azure),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                textStyle: _T.label(13, c: _P.azure),
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => _showOfferDialog(),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: Text(isMobile ? 'Add' : 'Add Offer'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _P.azure,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                textStyle: _T.label(13, c: Colors.white),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -835,6 +854,153 @@ class _OffersScreenRealtimeState extends State<OffersScreenRealtime> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showPromoEmailDialog(List<Map<String, dynamic>> offers) {
+    final subjectCtrl = TextEditingController(text: '{firstName}, your first DryClean Plus order is 20% off');
+    final headlineCtrl = TextEditingController(text: '{firstName}, your first DryClean Plus order is 20% off.');
+    final codeCtrl = TextEditingController(text: 'WELCOME20');
+    final bodyCtrl = TextEditingController(
+        text: 'Pick a time that suits you, we collect from your home or office, and deliver back fresh to your door with free delivery. Add code {code} at checkout to get 20% off your first order.');
+    final ctaCtrl = TextEditingController(text: 'GET 20% OFF MY FIRST ORDER');
+    final testEmailCtrl = TextEditingController(text: 'drycleanplus2@gmail.com');
+    String audience = 'test'; // 'test' | 'first_order' | 'all'
+    String? selectedOfferId;
+    bool sending = false;
+
+    final activeOffers = offers.where((o) => o['isActive'] != false && (o['discountCode'] ?? '').toString().trim().isNotEmpty).toList();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          backgroundColor: _P.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: _P.azureLight, borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.mark_email_read_outlined, color: _P.azure, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Text('Send Promo Email', style: _T.display(18)),
+            ],
+          ),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (activeOffers.isNotEmpty) ...[
+                    _label('AUTO-FILL FROM AN OFFER (OPTIONAL)'),
+                    DropdownButtonFormField<String>(
+                      value: selectedOfferId,
+                      hint: const Text('Pick Black Friday / custom offer…'),
+                      decoration: _inputDeco(),
+                      items: activeOffers.map((o) {
+                        final code = (o['discountCode'] ?? '').toString();
+                        final val = (o['discountValue'] ?? '').toString();
+                        final isPct = o['discountType'] == 'percentage';
+                        final disc = isPct ? '$val% off' : '£$val off';
+                        return DropdownMenuItem(
+                          value: o['id'] as String,
+                          child: Text('$code ($disc) — ${o['title'] ?? ''}'),
+                        );
+                      }).toList(),
+                      onChanged: (id) {
+                        if (id == null) return;
+                        final o = activeOffers.firstWhere((e) => e['id'] == id);
+                        final code = (o['discountCode'] ?? '').toString().trim().toUpperCase();
+                        final val = (o['discountValue'] ?? 20).toString().replaceAll(RegExp(r'\.0$'), '');
+                        final isPct = o['discountType'] == 'percentage';
+                        final disc = isPct ? '$val% off' : '£$val off';
+                        final title = (o['title'] ?? 'Special Offer').toString().trim();
+                        setS(() {
+                          selectedOfferId = id;
+                          codeCtrl.text = code;
+                          subjectCtrl.text = '{firstName}, enjoy $disc on your DryClean Plus order 🧺';
+                          headlineCtrl.text = '{firstName}, $title — $disc!';
+                          bodyCtrl.text = 'Pick a time that suits you, we collect from your home or office, and deliver back fresh to your door with free delivery. Add code {code} at checkout to get $disc your order.';
+                          ctaCtrl.text = 'CLAIM $disc WITH $code';
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  _label('AUDIENCE'),
+                  DropdownButtonFormField<String>(
+                    value: audience,
+                    decoration: _inputDeco(),
+                    items: const [
+                      DropdownMenuItem(value: 'test', child: Text('Test Email (Send to 1 address first)')),
+                      DropdownMenuItem(value: 'first_order', child: Text('New Customers (0 orders placed)')),
+                      DropdownMenuItem(value: 'all', child: Text('All Registered Customers')),
+                    ],
+                    onChanged: (v) { if (v != null) setS(() => audience = v); },
+                  ),
+                  if (audience == 'test') ...[
+                    const SizedBox(height: 12),
+                    _label('TEST EMAIL ADDRESS'),
+                    TextField(controller: testEmailCtrl, decoration: _inputDeco(hint: 'drycleanplus2@gmail.com')),
+                  ],
+                  const SizedBox(height: 12),
+                  _label('EMAIL SUBJECT  ({firstName} auto-personalizes)'),
+                  TextField(controller: subjectCtrl, decoration: _inputDeco()),
+                  const SizedBox(height: 12),
+                  _label('BIG HEADLINE'),
+                  TextField(controller: headlineCtrl, decoration: _inputDeco()),
+                  const SizedBox(height: 12),
+                  _label('PROMO CODE'),
+                  TextField(controller: codeCtrl, decoration: _inputDeco(hint: 'WELCOME20')),
+                  const SizedBox(height: 12),
+                  _label('OFFER MESSAGE'),
+                  TextField(controller: bodyCtrl, maxLines: 3, decoration: _inputDeco()),
+                  const SizedBox(height: 12),
+                  _label('BUTTON TEXT'),
+                  TextField(controller: ctaCtrl, decoration: _inputDeco()),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: sending ? null : () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton.icon(
+              onPressed: sending
+                  ? null
+                  : () async {
+                      setS(() => sending = true);
+                      final res = await ResendEmailService.instance.sendPromoEmail(
+                        audience: audience,
+                        testEmail: testEmailCtrl.text,
+                        subject: subjectCtrl.text,
+                        headline: headlineCtrl.text,
+                        body2: bodyCtrl.text,
+                        promoCode: codeCtrl.text,
+                        ctaText: ctaCtrl.text,
+                      );
+                      if (!ctx.mounted) return;
+                      Navigator.pop(ctx);
+                      final ok = res['success'] == true;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        backgroundColor: ok ? _P.emerald : _P.rose,
+                        content: Text(ok
+                            ? 'Sent ${res['sent'] ?? 1} promo email(s)${res['failed'] != null && res['failed'] > 0 ? ' (${res['failed']} failed)' : ''}'
+                            : 'Failed: ${res['error'] ?? 'Unknown error'}'),
+                      ));
+                    },
+              icon: sending
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.send_rounded, size: 17),
+              label: Text(sending ? 'Sending…' : (audience == 'test' ? 'Send Test Email' : 'Send Broadcast')),
+              style: ElevatedButton.styleFrom(backgroundColor: _P.azure, foregroundColor: Colors.white),
+            ),
+          ],
+        ),
       ),
     );
   }
