@@ -149,62 +149,68 @@ class _OffersScreenRealtimeState extends State<OffersScreenRealtime> {
   // ── Header ─────────────────────────────────────────────────────────────────
 
   Widget _buildHeader(bool isMobile, int total, List<Map<String, dynamic>> offers) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Offers & Promotions', style: _T.display(isMobile ? 22 : 30)),
-            const SizedBox(height: 4),
-            Text('$total offer${total == 1 ? '' : 's'} total',
-                style: _T.body(13)),
-          ],
-        ),
-        Wrap(
-          spacing: 10,
-          runSpacing: 8,
-          children: [
-            OutlinedButton.icon(
-              onPressed: () => _showPromoEmailDialog(offers),
-              icon: const Icon(Icons.mark_email_read_outlined, size: 18),
-              label: Text(isMobile ? 'Email' : 'Promo Email'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: _P.azure,
-                side: const BorderSide(color: _P.azure),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                textStyle: _T.label(13, c: _P.azure),
+    return SizedBox(
+      width: double.infinity,
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Offers & Promotions', style: _T.display(isMobile ? 22 : 30)),
+              const SizedBox(height: 4),
+              Text('$total offer${total == 1 ? '' : 's'} total',
+                  style: _T.body(13)),
+            ],
+          ),
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => _showPromoEmailDialog(offers),
+                icon: const Icon(Icons.mark_email_read_outlined, size: 18),
+                label: Text(isMobile ? 'Promo Email' : 'Promo Email'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _P.azure,
+                  side: const BorderSide(color: _P.azure),
+                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: isMobile ? 11 : 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  textStyle: _T.label(13, c: _P.azure),
+                ),
               ),
-            ),
-            ElevatedButton.icon(
-              onPressed: () => _showOfferDialog(),
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: Text(isMobile ? 'Add' : 'Add Offer'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _P.azure,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                textStyle: _T.label(13, c: Colors.white),
+              ElevatedButton.icon(
+                onPressed: () => _showOfferDialog(),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text(isMobile ? 'Add Offer' : 'Add Offer'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _P.azure,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 20, vertical: isMobile ? 11 : 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  textStyle: _T.label(13, c: Colors.white),
+                ),
               ),
-            ),
-          ],
-        ),
-      ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 
   // ── Stat row ───────────────────────────────────────────────────────────────
 
   Widget _buildStatRow(int total, int active, int expired) {
-    return Row(
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
         _StatChip(label: 'Total',   value: '$total',   color: _P.azure,   bg: _P.azureLight),
-        const SizedBox(width: 10),
         _StatChip(label: 'Active',  value: '$active',  color: _P.emerald, bg: _P.emeraldBg),
-        const SizedBox(width: 10),
         _StatChip(label: 'Expired', value: '$expired', color: _P.rose,    bg: _P.roseBg),
       ],
     );
@@ -260,18 +266,29 @@ class _OffersScreenRealtimeState extends State<OffersScreenRealtime> {
   // ── Grid ───────────────────────────────────────────────────────────────────
 
   Widget _buildGrid(bool isMobile, List<Map<String, dynamic>> offers) {
-    final crossCount = isMobile
-        ? 1
-        : Responsive.isTablet(context)
-            ? 2
-            : 3;
+    if (isMobile) {
+      return ListView.separated(
+        padding: const EdgeInsets.only(bottom: 16),
+        itemCount: offers.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (_, i) => _AdminOfferCard(
+          offer:    offers[i],
+          onEdit:   () => _showOfferDialog(offer: offers[i]),
+          onDelete: () => _confirmDelete(offers[i]),
+          onToggle: (val) =>
+              _adminService.toggleOfferActive(offers[i]['id'] as String, val),
+        ),
+      );
+    }
+
+    final crossCount = Responsive.isTablet(context) ? 2 : 3;
 
     return GridView.builder(
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount:   crossCount,
         crossAxisSpacing: 16,
         mainAxisSpacing:  16,
-        childAspectRatio: isMobile ? 1.8 : 1.55,
+        childAspectRatio: 1.55,
       ),
       itemCount: offers.length,
       itemBuilder: (_, i) => _AdminOfferCard(
@@ -877,6 +894,7 @@ class _OffersScreenRealtimeState extends State<OffersScreenRealtime> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) => AlertDialog(
           backgroundColor: _P.card,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           title: Row(
             children: [
