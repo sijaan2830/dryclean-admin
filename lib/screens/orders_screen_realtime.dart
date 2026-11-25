@@ -366,10 +366,18 @@ class _Status {
   };
 
   static const List<String> all = [
-    'pending', 'confirmed', 'pickup_assigned', 'pickup_en_route', 'pickup_arrived', 'pickup_failed',
-    'collected', 'at_facility', 'inspecting', 'awaiting_approval', 'cleaning', 'quality_check',
-    'ready_for_delivery', 'delivery_assigned', 'out_for_delivery', 'delivery_arrived', 'delivery_failed',
-    'delivered', 'cancelled',
+    'pending',
+    'confirmed',
+    'pickup_assigned',
+    'pickup_en_route',
+    'collected',
+    'awaiting_approval',
+    'cleaning',
+    'ready_for_delivery',
+    'delivery_assigned',
+    'out_for_delivery',
+    'delivered',
+    'cancelled',
   ];
 
   static const Map<String, Set<String>> groups = {
@@ -1771,32 +1779,38 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
           const SizedBox(height: 10),
 
           // Status dropdown
-          DropdownButtonFormField<String>(
-            value: _mapOldStatusToNew(widget.order['status'] ?? 'pending'),
-            decoration: _inputDeco(label: 'Update Status'),
-            style: _T.body(13.5, c: _P.textPrimary),
-            dropdownColor: _P.card,
-            borderRadius: BorderRadius.circular(12),
-            icon: const Icon(Icons.expand_more_rounded, color: _P.textMuted),
-            items: _Status.all
-                .map((s) {
-                  final cfg = _Status.of(s);
-                  return DropdownMenuItem(
-                    value: s,
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 9,
-                          height: 9,
-                          decoration: BoxDecoration(color: cfg.color, shape: BoxShape.circle),
+          Builder(
+            builder: (context) {
+              final current = _mapOldStatusToNew(widget.order['status'] ?? 'pending');
+              final options = _Status.all.contains(current) ? _Status.all : [..._Status.all, current];
+              return DropdownButtonFormField<String>(
+                value: current,
+                decoration: _inputDeco(label: 'Update Status'),
+                style: _T.body(13.5, c: _P.textPrimary),
+                dropdownColor: _P.card,
+                borderRadius: BorderRadius.circular(12),
+                icon: const Icon(Icons.expand_more_rounded, color: _P.textMuted),
+                items: options
+                    .map((s) {
+                      final cfg = _Status.of(s);
+                      return DropdownMenuItem(
+                        value: s,
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 9,
+                              height: 9,
+                              decoration: BoxDecoration(color: cfg.color, shape: BoxShape.circle),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(cfg.label, style: _T.body(13.5, c: _P.textPrimary)),
+                          ],
                         ),
-                        const SizedBox(width: 10),
-                        Text(cfg.label, style: _T.body(13.5, c: _P.textPrimary)),
-                      ],
-                    ),
-                  );
-                }).toList(),
-            onChanged: (v) { if (v != null) widget.onStatusChanged(v); },
+                      );
+                    }).toList(),
+                onChanged: (v) { if (v != null) widget.onStatusChanged(v); },
+              );
+            },
           ),
         ],
       ),
