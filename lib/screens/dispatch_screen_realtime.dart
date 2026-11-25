@@ -335,7 +335,9 @@ class _DispatchScreenRealtimeState extends State<DispatchScreenRealtime> with Si
       'slotDay': _s(pickup ? b['collectionDate'] : b['deliveryDate']),
       'customerName': '${_s(b['firstName'])} ${_s(b['lastName'])}'.trim(),
       'customerUid': _s(o['userId']),
-      'phone': _s(b['phone']),
+      'phone': _s(b['phone']).isNotEmpty
+          ? _s(b['phone'])
+          : (_s(b['phoneNumber']).isNotEmpty ? _s(b['phoneNumber']) : (_s(o['phone']).isNotEmpty ? _s(o['phone']) : _s(o['customerPhone']))),
       'address': {
         'line1': [_s(addr['buildingName']), _s(addr['line1'])].where((e) => e.isNotEmpty).join(', '),
         'line2': _s(addr['line2']),
