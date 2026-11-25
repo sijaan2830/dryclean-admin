@@ -1012,6 +1012,19 @@ class _OffersScreenRealtimeState extends State<OffersScreenRealtime> {
         child: Text(text, style: _T.label(12, c: _P.textSecondary)),
       );
 
+  InputDecoration _inputDeco({String? hint}) => InputDecoration(
+        hintText: hint,
+        hintStyle: _T.body(14, c: _P.textTertiary),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _P.border)),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _P.border)),
+      );
+
   Widget _field(
     TextEditingController ctrl,
     String hint, {
