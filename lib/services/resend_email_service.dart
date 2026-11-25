@@ -11,6 +11,21 @@ class ResendEmailService {
 
   static const String _apiEndpoint = 'https://drycleanplus.co.uk/api/send-email';
 
+  static dynamic _jsonSafe(dynamic v) {
+    if (v == null || v is num || v is String || v is bool) return v;
+    if (v is Timestamp) return v.toDate().toIso8601String();
+    if (v is DateTime) return v.toIso8601String();
+    if (v is GeoPoint) return {'latitude': v.latitude, 'longitude': v.longitude};
+    if (v is DocumentReference) return v.path;
+    if (v is Map) {
+      return {for (final e in v.entries) e.key.toString(): _jsonSafe(e.value)};
+    }
+    if (v is Iterable) {
+      return [for (final item in v) _jsonSafe(item)];
+    }
+    return v.toString();
+  }
+
   /// Sends email via the secure DryClean Plus serverless mail endpoint
   Future<Map<String, dynamic>> sendEmail({
     required String to,
@@ -30,7 +45,7 @@ class ResendEmailService {
         body: jsonEncode({
           'type': type,
           'recipientEmail': to.trim(),
-          'order': order,
+          'order': _jsonSafe(order),
         }),
       );
 
