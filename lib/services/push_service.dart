@@ -16,6 +16,7 @@ class PushService {
     required String title,
     String body = '',
     Map<String, String>? data,
+    String collection = 'users',
   }) async {
     if (userId.isEmpty || userId == 'website_guest' || userId == 'dummy') return;
     try {
@@ -29,6 +30,7 @@ class PushService {
           'userId': userId,
           'title': title,
           'body': body,
+          'collection': collection,
           if (data != null) 'data': data,
         }),
       ).timeout(const Duration(seconds: 15));

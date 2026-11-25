@@ -400,6 +400,15 @@ class _DispatchScreenRealtimeState extends State<DispatchScreenRealtime> with Si
         data: {'type': 'order', 'orderId': order.id},
       );
     }
+    PushService.send(
+      collection: 'drivers',
+      userId: res.driver.id,
+      title: 'New ${pickup ? 'Pickup' : 'Delivery'} Job: #$displayId',
+      body: '${_s(b['firstName'])} ${_s(b['lastName'])}'.trim().isNotEmpty
+          ? '${_s(b['firstName'])} ${_s(b['lastName'])} ($postcode)'
+          : postcode,
+      data: {'type': 'job', 'orderId': order.id},
+    );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('${pickup ? 'Pickup' : 'Delivery'} for #${_s(o['orderId'])} sent to $dName${geo == null ? ' (postcode not found — the driver app will look it up)' : ''}.'),
