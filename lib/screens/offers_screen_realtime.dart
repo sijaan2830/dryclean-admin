@@ -876,11 +876,11 @@ class _OffersScreenRealtimeState extends State<OffersScreenRealtime> {
   }
 
   void _showPromoEmailDialog(List<Map<String, dynamic>> offers) {
-    final subjectCtrl = TextEditingController(text: '{firstName}, your first DryClean Plus order is 20% off');
-    final headlineCtrl = TextEditingController(text: '{firstName}, your first DryClean Plus order is 20% off.');
+    final subjectCtrl = TextEditingController(text: 'Your first DryClean Plus order is 20% off 🧺');
+    final headlineCtrl = TextEditingController(text: 'Your first DryClean Plus order is 20% off.');
     final codeCtrl = TextEditingController(text: 'WELCOME20');
     final bodyCtrl = TextEditingController(
-        text: 'Pick a time that suits you, we collect from your home or office, and deliver back fresh to your door with free delivery. Add code {code} at checkout to get 20% off your first order.');
+        text: 'Pick a time that suits you, we collect from your home or office, and deliver back fresh to your door with free delivery. Use code WELCOME20 at checkout to get 20% off your first order.');
     final ctaCtrl = TextEditingController(text: 'GET 20% OFF MY FIRST ORDER');
     final testEmailCtrl = TextEditingController(text: 'drycleanplus2@gmail.com');
     String audience = 'test'; // 'test' | 'first_order' | 'all'
@@ -941,9 +941,9 @@ class _OffersScreenRealtimeState extends State<OffersScreenRealtime> {
                         setS(() {
                           selectedOfferId = id;
                           codeCtrl.text = code;
-                          subjectCtrl.text = '{firstName}, enjoy $disc on your DryClean Plus order 🧺';
-                          headlineCtrl.text = '{firstName}, $title — $disc!';
-                          bodyCtrl.text = 'Pick a time that suits you, we collect from your home or office, and deliver back fresh to your door with free delivery. Add code {code} at checkout to get $disc your order.';
+                          subjectCtrl.text = 'Enjoy $disc on your DryClean Plus order 🧺';
+                          headlineCtrl.text = '$title — $disc!';
+                          bodyCtrl.text = 'Pick a time that suits you, we collect from your home or office, and deliver back fresh to your door with free delivery. Use code $code at checkout to get $disc your order.';
                           ctaCtrl.text = 'CLAIM $disc WITH $code';
                         });
                       },
@@ -967,7 +967,7 @@ class _OffersScreenRealtimeState extends State<OffersScreenRealtime> {
                     TextField(controller: testEmailCtrl, decoration: _inputDeco(hint: 'drycleanplus2@gmail.com')),
                   ],
                   const SizedBox(height: 12),
-                  _label('EMAIL SUBJECT  ({firstName} auto-personalizes)'),
+                  _label('EMAIL SUBJECT'),
                   TextField(controller: subjectCtrl, decoration: _inputDeco()),
                   const SizedBox(height: 12),
                   _label('BIG HEADLINE'),
