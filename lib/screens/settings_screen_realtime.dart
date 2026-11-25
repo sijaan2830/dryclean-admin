@@ -103,7 +103,7 @@ class _SettingsScreenRealtimeState extends State<SettingsScreenRealtime> {
                         ),
                         _buildSettingItem(
                           'Business Address',
-                          _settings?['businessAddress'] ?? '123 Main Street, London, UK',
+                          _settings?['businessAddress'] ?? '2c Bar Gate, Newark NG24 1ES, United Kingdom',
                           Icons.location_on,
                           () => _showEditDialog('businessAddress', _settings?['businessAddress'] ?? '123 Main Street, London, UK'),
                         ),

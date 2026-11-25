@@ -2057,7 +2057,7 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                                   ],
                                 ),
                                 const SizedBox(height: 6),
-                                Text('DryClean Plus Ltd\nsupport@drycleanplus.co.uk · www.drycleanplus.co.uk',
+                                Text('DryClean Plus Ltd · 2c Bar Gate, Newark NG24 1ES, United Kingdom\ndilee@drycleanplus.co.uk · +44 7424 866802',
                                     style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF64748B), height: 1.45)),
                               ],
                             ),
@@ -2645,8 +2645,8 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                 </div>
                 <div class="company">
                   DryClean Plus Ltd<br>
-                  support@drycleanplus.co.uk<br>
-                  www.drycleanplus.co.uk
+                  2c Bar Gate, Newark NG24 1ES, United Kingdom<br>
+                  dilee@drycleanplus.co.uk · www.drycleanplus.co.uk
                 </div>
               </td>
               <td style="text-align: right;">
@@ -2743,8 +2743,8 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
         <td class="r-foot">
           <div class="footer">
             <p class="thanks">Thank you for choosing DryClean Plus.</p>
-            <p>Questions about this invoice? Email support@drycleanplus.co.uk or call +44 7424 866802.</p>
-            <p>DryClean Plus Ltd · www.drycleanplus.co.uk</p>
+            <p>Questions about this invoice? Email dilee@drycleanplus.co.uk or call +44 7424 866802.</p>
+            <p>DryClean Plus Ltd · 2c Bar Gate, Newark NG24 1ES, United Kingdom</p>
           </div>
         </td>
       </tr>
@@ -2825,8 +2825,8 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
 <body>
   <div class="center">
     <div style="font-size: 18px; font-weight: 900; letter-spacing: 1px;">DRYCLEAN PLUS</div>
-    <div style="font-size: 10px; font-weight: 700; margin-top: 1px;">LONDON PREMIER LAUNDRY CARE</div>
-    <div style="font-size: 9px; margin-top: 2px;">www.drycleanplus.co.uk · 01636918181</div>
+    <div style="font-size: 10px; font-weight: 700; margin-top: 1px;">2c Bar Gate, Newark NG24 1ES, UK</div>
+    <div style="font-size: 9px; margin-top: 2px;">www.drycleanplus.co.uk · +44 7424 866802</div>
     <div class="cut-line"></div>
     <div style="font-size: 15px; font-weight: 900; margin: 4px 0;">ORDER #\$orderId</div>
     <div style="font-size: 10px;">\$dateStr · Status: \$statusLabel</div>
