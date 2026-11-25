@@ -1399,6 +1399,38 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                               );
                             },
                           ),
+                          Builder(
+                            builder: (context) {
+                              final pStatus = (widget.order['paymentStatus'] ?? bookingData['paymentStatus'] ?? '').toString().toLowerCase();
+                              final isPaid = pStatus == 'paid' || pStatus == 'paid_on_delivery';
+                              return OutlinedButton.icon(
+                                onPressed: () async {
+                                  final next = isPaid ? 'pay_on_delivery' : 'paid';
+                                  final svc = context.read<FirebaseAdminService>();
+                                  await svc.updatePaymentStatus(widget.order['id'].toString(), next);
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(next == 'paid' ? '✓ Order marked as Paid' : 'Marked as Unpaid'),
+                                      backgroundColor: next == 'paid' ? const Color(0xFF059669) : const Color(0xFF64748B),
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                },
+                                icon: Icon(isPaid ? Icons.check_circle_rounded : Icons.payments_outlined, size: 16),
+                                label: Text(isPaid ? 'Paid' : 'Mark Paid'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: isPaid ? const Color(0xFF059669) : const Color(0xFF0F172A),
+                                  backgroundColor: isPaid ? const Color(0xFFECFDF5) : Colors.white,
+                                  side: BorderSide(color: isPaid ? const Color(0xFF059669) : const Color(0xFFCBD5E1)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  minimumSize: Size.zero,
+                                  textStyle: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w700),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              );
+                            },
+                          ),
                           ElevatedButton.icon(
                             onPressed: () => _openItemizeModal(context, widget.order, bookingData),
                             icon: const Icon(Icons.edit_note_rounded, size: 17),

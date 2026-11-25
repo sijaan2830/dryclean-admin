@@ -499,6 +499,59 @@ class FirebaseAdminService extends ChangeNotifier {
     }
   }
 
+  Future<void> updatePaymentStatus(String orderId, String paymentStatus) async {
+    try {
+      final ref = _firestore.collection('orders').doc(orderId);
+      final snap = await ref.get();
+      final data = snap.data() ?? {};
+      final userId = (data['userId'] ?? '').toString();
+      final displayId = (data['orderId'] ?? orderId).toString();
+      final isPaid = paymentStatus == 'paid';
+
+      final b = _firestore.batch();
+      b.update(ref, {
+        'paymentStatus': paymentStatus,
+        if (isPaid) 'paidAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      b.set(ref.collection('history').doc(), {
+        'status': isPaid ? 'payment_paid' : 'payment_pending',
+        'at': FieldValue.serverTimestamp(),
+        'byRole': 'admin',
+        'note': isPaid ? 'Marked as Paid in Admin Panel' : 'Marked as Unpaid in Admin Panel',
+      });
+
+      if (isPaid && userId.isNotEmpty && userId != 'website_guest' && userId != 'dummy') {
+        b.set(_firestore.collection('users').doc(userId).collection('notifications').doc(), {
+          'title': 'Payment received — thank you!',
+          'body': 'Payment for #$displayId has been confirmed.',
+          'category': 'orders',
+          'theme': 'mint',
+          'icon': 'check_circle',
+          'orderId': orderId,
+          'displayOrderId': displayId,
+          'status': (data['status'] ?? '').toString(),
+          'read': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      await b.commit();
+
+      if (isPaid && userId.isNotEmpty && userId != 'website_guest' && userId != 'dummy') {
+        PushService.send(
+          userId: userId,
+          title: 'Payment received — thank you!',
+          body: 'Payment for #$displayId has been confirmed.',
+          data: {'type': 'order', 'orderId': orderId},
+        );
+      }
+    } catch (e) {
+      debugPrint('FirebaseAdminService: Error updating payment status: $e');
+      rethrow;
+    }
+  }
+
   Future<void> updateService(
       String serviceId, Map<String, dynamic> updates) async {
     try {

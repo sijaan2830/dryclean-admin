@@ -884,10 +884,7 @@ class _OffersScreenRealtimeState extends State<OffersScreenRealtime> {
     final ctaCtrl = TextEditingController(text: 'GET 20% OFF MY FIRST ORDER');
     final testEmailCtrl = TextEditingController(text: 'drycleanplus2@gmail.com');
     String audience = 'test'; // 'test' | 'first_order' | 'all'
-    String? selectedOfferId;
     bool sending = false;
-
-    final activeOffers = offers.where((o) => o['isActive'] != false && (o['discountCode'] ?? '').toString().trim().isNotEmpty).toList();
 
     showDialog(
       context: context,
@@ -914,42 +911,6 @@ class _OffersScreenRealtimeState extends State<OffersScreenRealtime> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (activeOffers.isNotEmpty) ...[
-                    _label('AUTO-FILL FROM AN OFFER (OPTIONAL)'),
-                    DropdownButtonFormField<String>(
-                      value: selectedOfferId,
-                      hint: const Text('Pick Black Friday / custom offer…'),
-                      decoration: _inputDeco(),
-                      items: activeOffers.map((o) {
-                        final code = (o['discountCode'] ?? '').toString();
-                        final val = (o['discountValue'] ?? '').toString();
-                        final isPct = o['discountType'] == 'percentage';
-                        final disc = isPct ? '$val% off' : '£$val off';
-                        return DropdownMenuItem(
-                          value: o['id'] as String,
-                          child: Text('$code ($disc) — ${o['title'] ?? ''}'),
-                        );
-                      }).toList(),
-                      onChanged: (id) {
-                        if (id == null) return;
-                        final o = activeOffers.firstWhere((e) => e['id'] == id);
-                        final code = (o['discountCode'] ?? '').toString().trim().toUpperCase();
-                        final val = (o['discountValue'] ?? 20).toString().replaceAll(RegExp(r'\.0$'), '');
-                        final isPct = o['discountType'] == 'percentage';
-                        final disc = isPct ? '$val% off' : '£$val off';
-                        final title = (o['title'] ?? 'Special Offer').toString().trim();
-                        setS(() {
-                          selectedOfferId = id;
-                          codeCtrl.text = code;
-                          subjectCtrl.text = 'Enjoy $disc on your DryClean Plus order 🧺';
-                          headlineCtrl.text = '$title — $disc!';
-                          bodyCtrl.text = 'Pick a time that suits you, we collect from your home or office, and deliver back fresh to your door with free delivery. Use code $code at checkout to get $disc your order.';
-                          ctaCtrl.text = 'CLAIM $disc WITH $code';
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                  ],
                   _label('AUDIENCE'),
                   DropdownButtonFormField<String>(
                     value: audience,
