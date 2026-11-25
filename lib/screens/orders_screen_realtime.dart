@@ -2683,6 +2683,7 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
               </td>
               <td style="text-align: right;">
                 <div class="doc-title">Invoice</div>
+                ${(widget.order['paymentStatus']?.toString().toLowerCase() == 'paid' || widget.order['paymentStatus']?.toString().toLowerCase() == 'paid_on_delivery') ? '<div style="display:inline-block;margin:4px 0 6px;padding:3px 12px;border:2px solid #059669;background:#ECFDF5;color:#059669;border-radius:6px;font-weight:800;font-size:12px;letter-spacing:1.2px;">PAID</div>' : ''}
                 <table class="kv">
                   <tr><td class="k">Invoice number</td><td class="v">INV-\$orderId</td></tr>
                   <tr><td class="k">Date</td><td class="v">\$dateStr</td></tr>
