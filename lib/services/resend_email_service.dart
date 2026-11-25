@@ -9,7 +9,8 @@ class ResendEmailService {
   ResendEmailService._();
   static final ResendEmailService instance = ResendEmailService._();
 
-  static const String _apiEndpoint = 'https://drycleanplus.co.uk/api/send-email';
+  static const String _apiEndpoint = 'https://dc-push-service.onrender.com/api/send-email';
+  static const String _apiKey = 'dc_push_2026_drycleanplus';
 
   static dynamic _jsonSafe(dynamic v) {
     if (v == null || v is num || v is String || v is bool) return v;
@@ -41,7 +42,10 @@ class ResendEmailService {
     try {
       final res = await http.post(
         Uri.parse(_apiEndpoint),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': _apiKey,
+        },
         body: jsonEncode({
           'type': type,
           'recipientEmail': to.trim(),

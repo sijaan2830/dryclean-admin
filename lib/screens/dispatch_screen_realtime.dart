@@ -257,7 +257,14 @@ class _DispatchScreenRealtimeState extends State<DispatchScreenRealtime> with Si
               _OrderQueue(orders: collect, type: 'pickup', drivers: drivers, fleet: fleet, onAssign: _assign, waiting: oSnap.connectionState == ConnectionState.waiting),
               _OrderQueue(orders: deliver, type: 'delivery', drivers: drivers, fleet: fleet, onAssign: _assign, waiting: oSnap.connectionState == ConnectionState.waiting),
               _JobsList(jobs: jobs, day: _day, onDay: _setDay, onRemove: _unassign, map: wide ? null : _FleetMap(drivers: drivers, fleet: fleet, jobs: jobs)),
-              _Team(drivers: drivers, fleet: fleet, staff: _staff, onAdd: _addMember),
+              _Team(
+                drivers: drivers,
+                fleet: fleet,
+                staff: _staff,
+                onAdd: _addMember,
+                onDeleteDriver: (id, name) => _deleteMember('drivers', id, name),
+                onDeleteStaff: (id, name) => _deleteMember('staff', id, name),
+              ),
             ]),
           ),
         ]);
@@ -420,6 +427,34 @@ class _DispatchScreenRealtimeState extends State<DispatchScreenRealtime> with Si
     b.update(orderRef, {'status': back, 'updatedAt': FieldValue.serverTimestamp()});
     b.set(orderRef.collection('history').doc(), {'status': back, 'at': FieldValue.serverTimestamp(), 'byRole': 'dispatch', 'note': 'Driver job removed'});
     await b.commit();
+  }
+
+  Future<void> _deleteMember(String collection, String id, String name) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete team member?'),
+        content: Text('Remove "$name" permanently from Firebase? They will no longer appear in Dispatch or Team.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: _D.rose),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final b = _db.batch();
+    b.delete(_db.collection(collection).doc(id));
+    if (collection == 'drivers') {
+      b.delete(_db.collection('driver_locations').doc(id));
+      b.delete(_db.collection('staff').doc(id));
+    }
+    await b.commit();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Deleted "$name" from Firebase.')));
   }
 
   // ---------------------------------------------------------------- team
@@ -732,7 +767,16 @@ class _Team extends StatelessWidget {
   final Map<String, Map<String, dynamic>> fleet;
   final Stream<QuerySnapshot<Map<String, dynamic>>> staff;
   final VoidCallback onAdd;
-  const _Team({required this.drivers, required this.fleet, required this.staff, required this.onAdd});
+  final void Function(String id, String name) onDeleteDriver;
+  final void Function(String id, String name) onDeleteStaff;
+  const _Team({
+    required this.drivers,
+    required this.fleet,
+    required this.staff,
+    required this.onAdd,
+    required this.onDeleteDriver,
+    required this.onDeleteStaff,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -760,12 +804,14 @@ class _Team extends StatelessWidget {
               final m = d.data(), loc = fleet[d.id];
               final online = _isOnline(loc, m);
               final v = _m(m['vehicle']);
+              final name = _s(m['name']).ifEmpty('Driver');
               return _MemberRow(
-                name: _s(m['name']).ifEmpty('Driver'),
+                name: name,
                 sub: [_s(m['phone']), [_s(v['colour']), _s(v['make']), _s(v['reg'])].where((e) => e.isNotEmpty).join(' ')].where((e) => e.isNotEmpty).join(' · '),
                 trailing: online ? 'Online · ${_ago(_date(loc?['updatedAt']))}' : 'Offline',
                 good: online,
                 icon: Icons.local_shipping_rounded,
+                onDelete: () => onDeleteDriver(d.id, name),
               );
             }),
           const SizedBox(height: 18),
@@ -779,6 +825,7 @@ class _Team extends StatelessWidget {
               trailing: _s(f.data()['role']) == 'inspector' ? 'Intake app' : _s(f.data()['role']),
               good: true,
               icon: Icons.warehouse_rounded,
+              onDelete: () => onDeleteStaff(f.id, _s(f.data()['name']).ifEmpty('Staff')),
             ),
         ]);
       },
@@ -790,7 +837,8 @@ class _MemberRow extends StatelessWidget {
   final String name, sub, trailing;
   final bool good;
   final IconData icon;
-  const _MemberRow({required this.name, required this.sub, required this.trailing, required this.good, required this.icon});
+  final VoidCallback onDelete;
+  const _MemberRow({required this.name, required this.sub, required this.trailing, required this.good, required this.icon, required this.onDelete});
   @override
   Widget build(BuildContext context) => Container(
         margin: const EdgeInsets.only(bottom: 8),
@@ -805,6 +853,12 @@ class _MemberRow extends StatelessWidget {
             const SizedBox(width: 6),
             Text(trailing, style: _D.t(12.5, c: good ? _D.emerald : _D.mut, w: FontWeight.w700)),
           ]),
+          const SizedBox(width: 4),
+          IconButton(
+            tooltip: 'Delete member',
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline_rounded, color: _D.rose, size: 20),
+          ),
         ]),
       );
 }

@@ -338,7 +338,7 @@ class _Status {
     'pending':            _Status('Order Placed',       _P.amber,   _P.amberBg,   Icons.inbox_rounded),
     'confirmed':          _Status('Confirmed',          _P.amber,   _P.amberBg,   Icons.event_available_rounded),
     'pickup_assigned':    _Status('Driver Assigned',    _P.info,    _P.infoBg, Icons.assignment_ind_rounded),
-    'pickup_en_route':    _Status('Driver On The Way',  _P.info,    _P.infoBg, Icons.local_shipping_rounded),
+    'pickup_en_route':    _Status('Driver On The Way (Pickup)', _P.info, _P.infoBg, Icons.local_shipping_rounded),
     'pickup_arrived':     _Status('Driver Outside',     _P.info,    _P.infoBg, Icons.where_to_vote_rounded),
     'pickup_failed':      _Status('Collection Failed',  _P.rose,    _P.roseBg,    Icons.event_busy_rounded),
     'collected':          _Status('Collected',          _P.violet,  _P.violetBg,  Icons.inventory_2_rounded),
