@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:rxdart/rxdart.dart';
 
 import '../services/push_service.dart';
+import '../services/resend_email_service.dart';
 
 class FirebaseAdminService extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -480,6 +481,18 @@ class FirebaseAdminService extends ChangeNotifier {
           body: notif['body']!,
           data: {'type': 'order', 'orderId': orderId},
         );
+      }
+
+      // Automatically send Awaiting Approval bill or Delivered receipt + PDF email
+      if (newStatus == 'awaiting_approval' || newStatus == 'delivered') {
+        final orderPayload = Map<String, dynamic>.from(data)
+          ..['id'] = orderId
+          ..['status'] = newStatus;
+        if (newStatus == 'awaiting_approval') {
+          ResendEmailService.instance.sendBillApprovalEmail(orderPayload);
+        } else {
+          ResendEmailService.instance.sendDeliveredInvoiceEmail(orderPayload);
+        }
       }
     } catch (e) {
       debugPrint('FirebaseAdminService: Error updating order status: $e');
