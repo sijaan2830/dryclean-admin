@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:rxdart/rxdart.dart';
 
+import '../services/push_service.dart';
+
 class FirebaseAdminService extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   Stream<List<Map<String, dynamic>>>? _cachedOrdersStream;
@@ -468,6 +470,17 @@ class FirebaseAdminService extends ChangeNotifier {
       }
 
       await b.commit();
+
+      // Fire-and-forget FCM push so the user gets an OS-level notification
+      // even when the app is completely closed / killed.
+      if (notif != null && userId.isNotEmpty && userId != 'website_guest' && userId != 'dummy') {
+        PushService.send(
+          userId: userId,
+          title: notif['title']!,
+          body: notif['body']!,
+          data: {'type': 'order', 'orderId': orderId},
+        );
+      }
     } catch (e) {
       debugPrint('FirebaseAdminService: Error updating order status: $e');
       rethrow;
