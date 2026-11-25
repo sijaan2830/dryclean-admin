@@ -10,6 +10,8 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../services/push_service.dart';
+
 /// Dispatch — turns orders into driver jobs and shows the fleet live.
 ///
 /// Flow (one Firestore database shared by every app):
@@ -265,8 +267,12 @@ class _DispatchScreenRealtimeState extends State<DispatchScreenRealtime> with Si
 
   // ---------------------------------------------------------------- assign
   Future<void> _assign(QueryDocumentSnapshot<Map<String, dynamic>> order, String type) async {
-    final drivers = (await _db.collection('drivers').get()).docs;
-    final fleet = {for (final d in (await _db.collection('driver_locations').get()).docs) d.id: d.data()};
+    final snaps = await Future.wait([
+      _db.collection('drivers').get(),
+      _db.collection('driver_locations').get(),
+    ]);
+    final drivers = snaps[0].docs;
+    final fleet = {for (final d in snaps[1].docs) d.id: d.data()};
     if (!mounted) return;
     if (drivers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add a driver in the Team tab first.')));
@@ -288,11 +294,12 @@ class _DispatchScreenRealtimeState extends State<DispatchScreenRealtime> with Si
       geo = LatLng((addr['lat'] as num).toDouble(), (addr['lng'] as num).toDouble());
     } else if (o['geo'] != null && o['geo'] is Map && o['geo']['lat'] != null && o['geo']['lng'] != null) {
       geo = LatLng((o['geo']['lat'] as num).toDouble(), (o['geo']['lng'] as num).toDouble());
-    } else {
-      geo = await _geocode(postcode);
     }
     final date = _dayKey(res.date);
-    final existing = await _db.collection('jobs').where('driverId', isEqualTo: res.driver.id).where('date', isEqualTo: date).get();
+    final existingFuture = _db.collection('jobs').where('driverId', isEqualTo: res.driver.id).where('date', isEqualTo: date).get();
+    final geoFuture = geo != null ? Future<LatLng?>.value(geo) : _geocode(postcode);
+    final existing = await existingFuture;
+    geo = await geoFuture;
     final items = _m(b['selectedItems']).values.map(_m).map((i) => {
           'name': _s(i['itemType']).isNotEmpty ? _s(i['itemType']) : (_s(i['description']).isNotEmpty ? _s(i['description']) : _s(i['category'])),
           'qty': (i['quantity'] as num?)?.toInt() ?? 1,
@@ -355,7 +362,37 @@ class _DispatchScreenRealtimeState extends State<DispatchScreenRealtime> with Si
       'byRole': 'dispatch',
       'note': '${dName.split(' ').first} will ${pickup ? 'collect' : 'deliver'} on ${DateFormat('EEE d MMM').format(res.date)}',
     });
+
+    final customerUid = _s(o['userId']);
+    final displayId = _s(o['orderId']).isEmpty ? order.id : _s(o['orderId']);
+    final notifTitle = pickup ? 'Driver assigned' : 'Delivery booked';
+    final notifBody = pickup
+        ? 'A driver has been assigned to collect #$displayId.'
+        : 'A driver is scheduled to deliver #$displayId.';
+    if (customerUid.isNotEmpty && customerUid != 'website_guest' && customerUid != 'dummy') {
+      batch.set(_db.collection('users').doc(customerUid).collection('notifications').doc(), {
+        'title': notifTitle,
+        'body': notifBody,
+        'category': 'orders',
+        'theme': 'blue',
+        'icon': 'person_pin',
+        'orderId': order.id,
+        'displayOrderId': displayId,
+        'status': status,
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+
     await batch.commit();
+    if (customerUid.isNotEmpty && customerUid != 'website_guest' && customerUid != 'dummy') {
+      PushService.send(
+        userId: customerUid,
+        title: notifTitle,
+        body: notifBody,
+        data: {'type': 'order', 'orderId': order.id},
+      );
+    }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('${pickup ? 'Pickup' : 'Delivery'} for #${_s(o['orderId'])} sent to $dName${geo == null ? ' (postcode not found — the driver app will look it up)' : ''}.'),
