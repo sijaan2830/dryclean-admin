@@ -509,8 +509,10 @@ class FirebaseAdminService extends ChangeNotifier {
       final isPaid = paymentStatus == 'paid';
 
       final b = _firestore.batch();
+      final currentMethod = (data['paymentMethod'] ?? '').toString().toLowerCase();
       b.update(ref, {
         'paymentStatus': paymentStatus,
+        if (isPaid && currentMethod == 'cod') 'paymentMethod': 'Paid',
         if (isPaid) 'paidAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
