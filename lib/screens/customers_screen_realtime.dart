@@ -290,6 +290,17 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 customer['createdAt'] != null
                     ? DateFormat('MMM yyyy').format(customer['createdAt'])
                     : 'Unknown'),
+              const SizedBox(width: 24),
+              Builder(builder: (_) {
+                final l = customer['loyalty'];
+                final m = l is Map ? l : const {};
+                final cnt = (m['currentCount'] as num?)?.toInt() ?? 0;
+                final credit = (m['availableCredit'] as num?)?.toDouble() ?? 0.0;
+                return _buildStatItem(
+                  'Loyalty Card',
+                  '$cnt/5 orders · £${credit.toStringAsFixed(2)} credit',
+                );
+              }),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

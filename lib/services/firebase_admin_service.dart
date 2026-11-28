@@ -221,6 +221,7 @@ class FirebaseAdminService {
           'createdAt': data['createdAt']?.toDate() ?? DateTime.now(),
           'lastActive': lastActive, // Add this field
           'isActive': data['isActive'] ?? true,
+          if (data['loyalty'] is Map) 'loyalty': Map<String, dynamic>.from(data['loyalty'] as Map),
         };
         
         debugPrint('FirebaseAdminService: Processed user data: $userData');

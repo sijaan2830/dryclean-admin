@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show FontFeature;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,9 +9,16 @@ import 'package:intl/intl.dart';
 import '../providers/firebase_admin_service.dart';
 import '../providers/firebase_auth_provider.dart';
 import '../services/fcm_sender_service.dart';
+import '../services/loyalty_sync_service.dart';
 import '../services/resend_email_service.dart';
 import '../widgets/responsive.dart';
 import '../utils/printer_helper.dart';
+
+String _fmtQty(num q) {
+  final d = q.toDouble();
+  if ((d - d.roundToDouble()).abs() < 0.001) return '${d.round()}';
+  return d.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+}
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 
@@ -1104,7 +1112,7 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
           final type = (val['itemType'] ?? val['name'] ?? val['title'] ?? entry.key).toString().trim();
           final p = val['price'];
           final desc = (val['description'] ?? '').toString().trim();
-          final qty = (val['quantity'] as num?)?.toInt() ?? 1;
+          final qty = (val['quantity'] as num?)?.toDouble() ?? (val['qty'] as num?)?.toDouble() ?? 1.0;
 
           if (cat.isNotEmpty || type.isNotEmpty || p != null) {
             result.add({
@@ -1120,7 +1128,7 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
             'category': '',
             'itemType': entry.key.toString(),
             'price': val,
-            'quantity': 1,
+            'quantity': 1.0,
             'description': '',
           });
         }
@@ -1132,7 +1140,7 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
           final type = (itm['itemType'] ?? itm['name'] ?? itm['title'] ?? '').toString().trim();
           final p = itm['price'];
           final desc = (itm['description'] ?? '').toString().trim();
-          final qty = (itm['quantity'] as num?)?.toInt() ?? 1;
+          final qty = (itm['quantity'] as num?)?.toDouble() ?? (itm['qty'] as num?)?.toDouble() ?? 1.0;
 
           if (cat.isNotEmpty || type.isNotEmpty || p != null) {
             result.add({
@@ -2222,14 +2230,14 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
                               ...items.map((itm) {
                                 final name = (itm['itemType'] ?? itm['name'] ?? 'Garment').toString();
                                 final cat = (itm['category'] ?? 'General').toString();
-                                final qty = (itm['quantity'] as num?)?.toInt() ?? (itm['qty'] as num?)?.toInt() ?? 1;
+                                final qty = (itm['quantity'] as num?)?.toDouble() ?? (itm['qty'] as num?)?.toDouble() ?? 1.0;
                                 final p = (itm['unitPrice'] as num?)?.toDouble() ?? _parsePrice(itm['price']);
                                 final lineTot = p * qty;
                                 return TableRow(
                                   children: [
                                     Padding(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8), child: Text(name, style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)))),
                                     Padding(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6), child: Text(cat, style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF64748B)))),
-                                    Padding(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6), child: Text('$qty', textAlign: TextAlign.center, style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF0F172A)))),
+                                    Padding(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6), child: Text(_fmtQty(qty), textAlign: TextAlign.center, style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF0F172A)))),
                                     Padding(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6), child: Text('£${p.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: const Color(0xFF334155)))),
                                     Padding(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8), child: Text('£${lineTot.toStringAsFixed(2)}', textAlign: TextAlign.right, style: GoogleFonts.plusJakartaSans(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)))),
                                   ],
@@ -2515,7 +2523,8 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
         final itm = items[i];
         final name = itm['itemType'] ?? itm['name'] ?? 'Garment';
         final cat = itm['category'] ?? 'General';
-        final qty = (itm['quantity'] as num?)?.toInt() ?? (itm['qty'] as num?)?.toInt() ?? 1;
+        final qty = (itm['quantity'] as num?)?.toDouble() ?? (itm['qty'] as num?)?.toDouble() ?? 1.0;
+        final qtyLabel = _fmtQty(qty);
         final p = (itm['unitPrice'] as num?)?.toDouble() ?? _parsePrice(itm['price']);
         final lineVal = p * qty;
         itemsSum += lineVal;
@@ -2525,7 +2534,7 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
             <td>\${i + 1}</td>
             <td style="font-weight: 600;">\$name</td>
             <td>\$cat</td>
-            <td>\$qty</td>
+            <td>\$qtyLabel</td>
             <td>£\${p.toStringAsFixed(2)}</td>
             <td style="font-weight: bold;">£\$rowTotal</td>
           </tr>
@@ -2831,13 +2840,14 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
     } else {
       for (final itm in items) {
         final name = itm['itemType'] ?? itm['name'] ?? 'Garment';
-        final qty = (itm['quantity'] as num?)?.toInt() ?? (itm['qty'] as num?)?.toInt() ?? 1;
+        final qty = (itm['quantity'] as num?)?.toDouble() ?? (itm['qty'] as num?)?.toDouble() ?? 1.0;
+        final qtyStr = _fmtQty(qty);
         final p = (itm['unitPrice'] as num?)?.toDouble() ?? _parsePrice(itm['price']);
-        totalCount += qty;
+        totalCount += qty.round();
         final rowTotal = (p * qty).toStringAsFixed(2);
         rows.write('''
           <tr>
-            <td style="padding: 3px 0; font-weight: 700;">\$name <span style="font-weight: 400; font-size: 10px;">(x\$qty)</span></td>
+            <td style="padding: 3px 0; font-weight: 700;">\$name <span style="font-weight: 400; font-size: 10px;">(x\$qtyStr)</span></td>
             <td style="padding: 3px 0; text-align: right; font-weight: 700;">£\$rowTotal</td>
           </tr>
         ''');
@@ -2945,13 +2955,14 @@ class _OrderCardState extends State<OrderCard> with SingleTickerProviderStateMix
 
     for (final itm in items) {
       final name = itm['itemType'] ?? itm['name'] ?? 'Garment';
-      final qty = (itm['quantity'] as num?)?.toInt() ?? (itm['qty'] as num?)?.toInt() ?? 1;
+      final qty = (itm['quantity'] as num?)?.toDouble() ?? (itm['qty'] as num?)?.toDouble() ?? 1.0;
+      final qtyStr = _fmtQty(qty);
       final p = (itm['unitPrice'] as num?)?.toDouble() ?? _parsePrice(itm['price']);
-      totalCount += qty;
+      totalCount += qty.round();
       final rowTotal = (p * qty).toStringAsFixed(2);
       rows.write('''
         <div style="display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 2px;">
-          <span style="font-weight: 700; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">\$name (x\$qty)</span>
+          <span style="font-weight: 700; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">\$name (x\$qtyStr)</span>
           <span style="font-weight: 700;">£\$rowTotal</span>
         </div>
       ''');
@@ -3128,7 +3139,7 @@ class _ItemRow extends StatelessWidget {
 
     String title = '';
     String priceStr = '0.00';
-    int qty = 1;
+    double qty = 1.0;
 
     if (item is Map) {
       final cat = (item['category'] ?? '').toString().trim();
@@ -3150,7 +3161,7 @@ class _ItemRow extends StatelessWidget {
         priceStr = p.toString().replaceAll('£', '').replaceAll(',', '').trim();
       }
 
-      qty = (item['quantity'] as num?)?.toInt() ?? 1;
+      qty = (item['quantity'] as num?)?.toDouble() ?? (item['qty'] as num?)?.toDouble() ?? 1.0;
     } else {
       title = item.toString();
     }
@@ -3169,7 +3180,7 @@ class _ItemRow extends StatelessWidget {
               color: _P.azureSoft,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Text('${qty}x', style: _T.heading(12, w: FontWeight.w800, c: _P.azure)),
+            child: Text('${_fmtQty(qty)}x', style: _T.heading(12, w: FontWeight.w800, c: _P.azure)),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -3328,17 +3339,28 @@ class _EditableLine {
   String category;
   String name;
   double unitPrice;
-  int qty;
+  double qty;
+  final TextEditingController qtyCtrl;
 
   _EditableLine({
     required this.id,
     required this.category,
     required this.name,
     required this.unitPrice,
-    this.qty = 1,
-  });
+    this.qty = 1.0,
+  }) : qtyCtrl = TextEditingController(text: _fmtQty(qty));
 
   double get total => unitPrice * qty;
+
+  void setQty(double next) {
+    qty = next;
+    final formatted = _fmtQty(next);
+    if (qtyCtrl.text != formatted) {
+      qtyCtrl.text = formatted;
+    }
+  }
+
+  void dispose() => qtyCtrl.dispose();
 }
 
 class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
@@ -3350,6 +3372,14 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
   double _serviceFee = 2.99;
   bool _deliveryFeeEnabled = false;
   double _deliveryFee = 0.0;
+
+  String _discountType = 'fixed'; // 'fixed' (£) | 'percent' (%)
+  final _discountValueCtrl = TextEditingController();
+  final _discountReasonCtrl = TextEditingController();
+
+  double _customerAvailableCredit = 0.0;
+  double _originalLoyaltyCreditUsed = 0.0;
+  bool _applyLoyaltyCredit = false;
 
   String? _selectedCategory;
   Map<String, dynamic>? _selectedCatalogItem;
@@ -3390,10 +3420,28 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
         }
       }
     } catch (_) {}
+
+    try {
+      final uid = (widget.order['userId'] ?? '').toString().trim();
+      if (uid.isNotEmpty && uid != 'website_guest' && uid != 'dummy') {
+        final uSnap = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        final loyalty = uSnap.data()?['loyalty'];
+        if (loyalty is Map && mounted) {
+          setState(() {
+            _customerAvailableCredit = (loyalty['availableCredit'] as num?)?.toDouble() ?? 0.0;
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   @override
   void dispose() {
+    for (final l in _lines) {
+      l.dispose();
+    }
+    _discountValueCtrl.dispose();
+    _discountReasonCtrl.dispose();
     _customNameCtrl.dispose();
     _customPriceCtrl.dispose();
     _customCatCtrl.dispose();
@@ -3402,18 +3450,40 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
   }
 
   void _initExistingItems() {
+    final existingDisc = (widget.order['discountAmount'] as num?)?.toDouble() ??
+        (widget.bookingData['discountAmount'] as num?)?.toDouble() ??
+        0.0;
+    final existingDiscType = (widget.order['discountType'] ?? 'fixed').toString();
+    final existingDiscInput = (widget.order['discountInput'] as num?)?.toDouble();
+    if (existingDiscType == 'percent' && existingDiscInput != null && existingDiscInput > 0) {
+      _discountType = 'percent';
+      _discountValueCtrl.text = _fmtQty(existingDiscInput);
+    } else if (existingDisc > 0) {
+      _discountType = 'fixed';
+      _discountValueCtrl.text = existingDisc.toStringAsFixed(2);
+    }
+    final existingCode = (widget.order['discountCode'] ?? widget.bookingData['discountCode'] ?? '').toString().trim();
+    if (existingCode.isNotEmpty) {
+      _discountReasonCtrl.text = existingCode;
+    }
+
+    _originalLoyaltyCreditUsed = (widget.order['loyaltyCreditUsed'] as num?)?.toDouble() ??
+        (widget.bookingData['loyaltyCreditUsed'] as num?)?.toDouble() ??
+        0.0;
+    _applyLoyaltyCredit = _originalLoyaltyCreditUsed > 0 || widget.order['loyaltyCreditRequested'] == true;
+
     final raw = widget.bookingData['selectedItems'] ?? widget.order['selectedItems'] ?? widget.order['items'] ?? widget.bookingData['items'];
     if (raw is Map) {
       raw.forEach((key, val) {
         if (val is Map) {
           final cat = (val['category'] ?? 'General').toString().trim();
           final name = (val['itemType'] ?? val['name'] ?? val['title'] ?? 'Item').toString().trim();
-          final p = _parsePrice(val['price'] ?? val['unitPrice']);
-          final int qty = (val['quantity'] as num?)?.toInt() ?? (val['qty'] as num?)?.toInt() ?? 1;
+          final p = _parsePrice(val['unitPrice'] ?? val['price']);
+          final double qty = (val['quantity'] as num?)?.toDouble() ?? (val['qty'] as num?)?.toDouble() ?? 1.0;
 
           final match = _lines.where((l) => l.name.toLowerCase() == name.toLowerCase() && l.category.toLowerCase() == cat.toLowerCase());
           if (match.isNotEmpty) {
-            match.first.qty += qty;
+            match.first.setQty(match.first.qty + qty);
           } else {
             _lines.add(_EditableLine(
               id: UniqueKey().toString(),
@@ -3430,8 +3500,8 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
         if (val is Map) {
           final cat = (val['category'] ?? 'General').toString().trim();
           final name = (val['itemType'] ?? val['name'] ?? val['title'] ?? 'Item').toString().trim();
-          final p = _parsePrice(val['price'] ?? val['unitPrice']);
-          final int qty = (val['qty'] as num?)?.toInt() ?? (val['quantity'] as num?)?.toInt() ?? 1;
+          final p = _parsePrice(val['unitPrice'] ?? val['price']);
+          final double qty = (val['qty'] as num?)?.toDouble() ?? (val['quantity'] as num?)?.toDouble() ?? 1.0;
           _lines.add(_EditableLine(
             id: UniqueKey().toString(),
             category: cat.isEmpty ? 'General' : cat,
@@ -3487,14 +3557,14 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
     final existing = _lines.where((l) => l.name.toLowerCase() == name.toLowerCase() && l.category.toLowerCase() == cat.toLowerCase());
     setState(() {
       if (existing.isNotEmpty) {
-        existing.first.qty++;
+        existing.first.setQty(existing.first.qty + 1.0);
       } else {
         _lines.add(_EditableLine(
           id: UniqueKey().toString(),
           category: cat,
           name: name,
           unitPrice: price,
-          qty: 1,
+          qty: 1.0,
         ));
       }
     });
@@ -3513,7 +3583,7 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
         category: cat,
         name: name,
         unitPrice: price,
-        qty: 1,
+        qty: 1.0,
       ));
       _customNameCtrl.clear();
       _customPriceCtrl.clear();
@@ -3522,10 +3592,27 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
 
   double get _subtotal => _lines.fold(0.0, (sum, l) => sum + l.total);
   double get _totalPrice => _subtotal;
-  int get _totalCount => _lines.fold(0, (sum, l) => sum + l.qty);
+  double get _totalCount => _lines.fold(0.0, (sum, l) => sum + l.qty);
   double get _appliedServiceFee => _serviceFeeEnabled ? _serviceFee : 0.0;
   double get _appliedDeliveryFee => _deliveryFeeEnabled ? _deliveryFee : 0.0;
-  double get _finalTotal => _subtotal + _appliedServiceFee + _appliedDeliveryFee;
+
+  double get _rawDiscountInput => _parsePrice(_discountValueCtrl.text);
+
+  double get _computedDiscount {
+    final raw = _rawDiscountInput;
+    if (raw <= 0) return 0.0;
+    final gross = _subtotal + _appliedServiceFee + _appliedDeliveryFee;
+    if (_discountType == 'percent') {
+      final pct = raw.clamp(0.0, 100.0);
+      return ((_subtotal * (pct / 100.0)) * 100).roundToDouble() / 100.0;
+    }
+    return raw.clamp(0.0, gross);
+  }
+
+  double get _totalBeforeLoyalty => math.max(0.0, _subtotal + _appliedServiceFee + _appliedDeliveryFee - _computedDiscount);
+  double get _maxRedeemableLoyalty => _customerAvailableCredit + _originalLoyaltyCreditUsed;
+  double get _appliedLoyaltyCredit => _applyLoyaltyCredit ? math.min(_maxRedeemableLoyalty, _totalBeforeLoyalty) : 0.0;
+  double get _finalTotal => math.max(0.0, _totalBeforeLoyalty - _appliedLoyaltyCredit);
 
   Future<void> _saveAndSync() async {
     if (_saving) return;
@@ -3543,16 +3630,19 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
       int counter = 0;
 
       for (final itm in _lines) {
-        for (int q = 0; q < itm.qty; q++) {
-          selectedItemsMap['item_$counter'] = {
-            'category': itm.category,
-            'itemType': itm.name,
-            'name': itm.name,
-            'price': itm.unitPrice.toStringAsFixed(2),
-            'description': itm.category,
-          };
-          counter++;
-        }
+        final qLabel = _fmtQty(itm.qty);
+        selectedItemsMap['item_$counter'] = {
+          'category': itm.category,
+          'itemType': (itm.qty - 1.0).abs() > 0.001 ? '${qLabel}× ${itm.name}' : itm.name,
+          'name': itm.name,
+          // Keep total line price in 'price' without 'unitPrice' inside bookingData.selectedItems
+          // so all app versions compute exact line & subtotal totals (including 6.5 kg weights).
+          'price': itm.total.toStringAsFixed(2),
+          'quantity': itm.qty,
+          'qty': itm.qty,
+          'description': '$qLabel × £${itm.unitPrice.toStringAsFixed(2)}',
+        };
+        counter++;
         itemsList.add({
           'category': itm.category,
           'itemType': itm.name,
@@ -3570,7 +3660,10 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
       final double subtotal = _subtotal;
       final double sFee = _appliedServiceFee;
       final double dFee = _appliedDeliveryFee;
-      final double newTotal = _finalTotal;
+      final double discAmt = (_computedDiscount * 100).roundToDouble() / 100.0;
+      final String discCode = _discountReasonCtrl.text.trim();
+      final double loyaltyUsed = (_appliedLoyaltyCredit * 100).roundToDouble() / 100.0;
+      final double newTotal = (_finalTotal * 100).roundToDouble() / 100.0;
       final double oldTotal = (widget.order['transactionAmount'] as num?)?.toDouble() ??
           (widget.order['totalAmount'] as num?)?.toDouble() ??
           0.0;
@@ -3581,6 +3674,9 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
 
       batch.update(orderRef, {
         'bookingData.selectedItems': selectedItemsMap,
+        'bookingData.discountAmount': discAmt,
+        'bookingData.discountCode': discCode.isEmpty ? null : discCode,
+        'bookingData.loyaltyCreditUsed': loyaltyUsed,
         'selectedItems': selectedItemsMap,
         'items': itemsList,
         'subtotal': subtotal,
@@ -3588,6 +3684,12 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
         'deliveryFee': dFee,
         'serviceFeeEnabled': _serviceFeeEnabled,
         'deliveryFeeEnabled': _deliveryFeeEnabled,
+        'discountAmount': discAmt,
+        'discountType': _discountType,
+        'discountInput': _rawDiscountInput,
+        'discountCode': discCode.isEmpty ? null : discCode,
+        'loyaltyCreditUsed': loyaltyUsed,
+        'loyaltyCreditRequested': _applyLoyaltyCredit,
         'transactionAmount': newTotal,
         'totalAmount': newTotal,
         'finalAmount': newTotal,
@@ -3595,6 +3697,8 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
           'subtotal': subtotal,
           'serviceFee': sFee,
           'deliveryFee': dFee,
+          'discount': discAmt,
+          'loyaltyCredit': loyaltyUsed,
           'estimated': oldTotal,
           'final': newTotal,
           'total': newTotal,
@@ -3612,18 +3716,37 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
           },
       });
 
+      final String customerUid = (widget.order['userId'] ?? '').toString().trim();
+      final double creditDelta = _originalLoyaltyCreditUsed - loyaltyUsed; // positive refunds, negative deducts
+      if (creditDelta.abs() >= 0.01 && customerUid.isNotEmpty && customerUid != 'website_guest' && customerUid != 'dummy') {
+        final nextAvail = ((math.max(0.0, _customerAvailableCredit + creditDelta)) * 100).roundToDouble() / 100.0;
+        batch.set(
+          FirebaseFirestore.instance.collection('users').doc(customerUid),
+          {
+            'loyalty': {
+              'availableCredit': nextAvail,
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+          },
+          SetOptions(merge: true),
+        );
+      }
+
       batch.set(orderRef.collection('intake').doc('main'), {
         'lines': itemsList,
         'totalItems': _totalCount,
         'totalPrice': newTotal,
+        'discountAmount': discAmt,
+        'loyaltyCreditUsed': loyaltyUsed,
         'notes': _notesCtrl.text.trim(),
         'updatedBy': 'admin',
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
+      final countLabel = _fmtQty(_totalCount);
       final String historyNote = needsApproval
-          ? 'Items counted at facility ($_totalCount item${_totalCount == 1 ? '' : 's'}) — New total £${newTotal.toStringAsFixed(2)}, waiting for your approval'
-          : 'Items inspected & priced ($_totalCount item${_totalCount == 1 ? '' : 's'}) — Total £${newTotal.toStringAsFixed(2)}';
+          ? 'Items counted at facility ($countLabel) — New total £${newTotal.toStringAsFixed(2)}, waiting for your approval'
+          : 'Items inspected & priced ($countLabel) — Total £${newTotal.toStringAsFixed(2)}';
 
       batch.set(orderRef.collection('history').doc(), {
         'status': newStatus,
@@ -3632,7 +3755,6 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
         'note': historyNote,
       });
 
-      final String customerUid = (widget.order['userId'] ?? '').toString();
       if (customerUid.isNotEmpty && customerUid != 'website_guest' && customerUid != 'dummy') {
         final String displayId = (widget.order['orderId'] ?? '').toString();
         final String idTag = displayId.isNotEmpty ? '#$displayId' : 'your order';
@@ -3640,8 +3762,8 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
         batch.set(notifRef, {
           'title': needsApproval ? 'Please approve your order' : 'Items inspected & priced',
           'body': needsApproval
-              ? 'We counted $_totalCount item${_totalCount == 1 ? '' : 's'} for $idTag — new total £${newTotal.toStringAsFixed(2)}. Tap to review.'
-              : '$_totalCount item${_totalCount == 1 ? '' : 's'} updated for $idTag — total £${newTotal.toStringAsFixed(2)}.',
+              ? 'We counted $countLabel for $idTag — new total £${newTotal.toStringAsFixed(2)}. Tap to review.'
+              : '$countLabel updated for $idTag — total £${newTotal.toStringAsFixed(2)}.',
           'category': 'orders',
           'theme': needsApproval ? 'amber' : 'violet',
           'icon': needsApproval ? 'pending_actions' : 'warehouse',
@@ -3654,13 +3776,17 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
       }
 
       await batch.commit();
+      await LoyaltySyncService.syncOrderById(docId);
 
       // Automated Free Resend Email for bill update approval
       if (needsApproval || newStatus == 'awaiting_approval') {
         final updatedOrder = Map<String, dynamic>.from(widget.order);
         updatedOrder['countedItems'] = itemsList;
         updatedOrder['subtotal'] = subtotal;
+        updatedOrder['discountAmount'] = discAmt;
+        updatedOrder['loyaltyCreditUsed'] = loyaltyUsed;
         updatedOrder['totalAmount'] = newTotal;
+        updatedOrder['transactionAmount'] = newTotal;
         ResendEmailService.instance.sendBillApprovalEmail(updatedOrder);
       }
 
@@ -3669,7 +3795,7 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Order #${widget.order['orderId']} updated: $_totalCount items, £${newTotal.toStringAsFixed(2)}'),
+          content: Text('Order #${widget.order['orderId']} updated: $countLabel qty/items, £${newTotal.toStringAsFixed(2)}'),
           backgroundColor: _P.azure,
           behavior: SnackBarBehavior.floating,
         ),
@@ -3892,37 +4018,57 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
         children: [
           IconButton(
             icon: const Icon(Icons.remove_rounded, size: 17),
-            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 34),
             padding: EdgeInsets.zero,
             splashRadius: 18,
             onPressed: () {
               setState(() {
-                if (line.qty > 1) {
-                  line.qty--;
+                if (line.qty > 1.0) {
+                  line.setQty(math.max(0.5, ((line.qty - 1.0) * 100).roundToDouble() / 100));
                 } else {
+                  line.dispose();
                   _lines.removeAt(index);
                 }
               });
             },
           ),
-          Container(
-            constraints: const BoxConstraints(minWidth: 28),
-            alignment: Alignment.center,
-            child: Text('${line.qty}', style: _T.money(14)),
+          SizedBox(
+            width: 48,
+            child: TextField(
+              controller: line.qtyCtrl,
+              textAlign: TextAlign.center,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              style: _T.money(13.5),
+              decoration: const InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                hintText: '1',
+              ),
+              onChanged: (val) {
+                final parsed = double.tryParse(val.replaceAll(',', '.').trim());
+                if (parsed != null && parsed > 0) {
+                  setState(() => line.qty = parsed);
+                }
+              },
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.add_rounded, size: 17),
-            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 34),
             padding: EdgeInsets.zero,
             splashRadius: 18,
-            onPressed: () => setState(() => line.qty++),
+            onPressed: () => setState(() => line.setQty(((line.qty + 1.0) * 100).roundToDouble() / 100)),
           ),
         ],
       ),
     );
 
     final deleteBtn = IconButton(
-      onPressed: () => setState(() => _lines.removeAt(index)),
+      onPressed: () => setState(() {
+        line.dispose();
+        _lines.removeAt(index);
+      }),
       tooltip: 'Remove item',
       splashRadius: 18,
       icon: const Icon(Icons.delete_outline_rounded, size: 20, color: _P.rose),
@@ -4159,10 +4305,15 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
 
                     // Section: Current Counted Clothes
                     _SectionTitle(
-                      'BAG CONTENTS & COUNT ($_totalCount ITEMS)',
+                      'BAG CONTENTS & WEIGHT/COUNT (${_fmtQty(_totalCount)})',
                       trailing: _lines.isNotEmpty
                           ? TextButton(
-                              onPressed: () => setState(() => _lines.clear()),
+                              onPressed: () => setState(() {
+                                for (final l in _lines) {
+                                  l.dispose();
+                                }
+                                _lines.clear();
+                              }),
                               style: TextButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 minimumSize: Size.zero,
@@ -4210,6 +4361,113 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
                         separatorBuilder: (_, __) => const SizedBox(height: 10),
                         itemBuilder: (context, index) => _buildLineCard(index, isMobile),
                       ),
+
+                    const SizedBox(height: 20),
+
+                    // Discount & Loyalty Credit Controls
+                    const _SectionTitle('DISCOUNT & LOYALTY CREDIT'),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: EdgeInsets.all(isMobile ? 12 : 14),
+                      decoration: _cardDeco(radius: 14, shadow: false),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (isMobile) ...[
+                            SegmentedButton<String>(
+                              segments: const [
+                                ButtonSegment(value: 'fixed', label: Text('£ Amount')),
+                                ButtonSegment(value: 'percent', label: Text('% Percent')),
+                              ],
+                              selected: {_discountType},
+                              onSelectionChanged: (s) => setState(() => _discountType = s.first),
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _discountValueCtrl,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    decoration: _inputDeco(
+                                      prefix: _discountType == 'fixed' ? '£ ' : '',
+                                      label: _discountType == 'fixed' ? 'Discount (£)' : 'Discount (%)',
+                                      hint: '0.00',
+                                    ),
+                                    style: _T.body(13, c: _P.textPrimary),
+                                    onChanged: (_) => setState(() {}),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _discountReasonCtrl,
+                                    decoration: _inputDeco(label: 'Code / Note', hint: 'Optional'),
+                                    style: _T.body(13, c: _P.textPrimary),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ] else
+                            Row(
+                              children: [
+                                SegmentedButton<String>(
+                                  segments: const [
+                                    ButtonSegment(value: 'fixed', label: Text('£')),
+                                    ButtonSegment(value: 'percent', label: Text('%')),
+                                  ],
+                                  selected: {_discountType},
+                                  onSelectionChanged: (s) => setState(() => _discountType = s.first),
+                                ),
+                                const SizedBox(width: 10),
+                                SizedBox(
+                                  width: 130,
+                                  child: TextField(
+                                    controller: _discountValueCtrl,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    decoration: _inputDeco(
+                                      prefix: _discountType == 'fixed' ? '£ ' : '',
+                                      label: _discountType == 'fixed' ? 'Discount (£)' : 'Discount (%)',
+                                      hint: '0.00',
+                                    ),
+                                    style: _T.body(13, c: _P.textPrimary),
+                                    onChanged: (_) => setState(() {}),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _discountReasonCtrl,
+                                    decoration: _inputDeco(label: 'Discount Code / Reason (Optional)', hint: 'e.g. WELCOME20 or Goodwill'),
+                                    style: _T.body(13, c: _P.textPrimary),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          if (_maxRedeemableLoyalty > 0) ...[
+                            const SizedBox(height: 10),
+                            const Divider(height: 1, color: _P.borderSoft),
+                            const SizedBox(height: 6),
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              activeColor: _P.emerald,
+                              value: _applyLoyaltyCredit,
+                              onChanged: (v) => setState(() => _applyLoyaltyCredit = v),
+                              title: Text(
+                                'Apply Customer Loyalty Credit (£${_maxRedeemableLoyalty.toStringAsFixed(2)} available)',
+                                style: _T.heading(13, c: _P.emerald),
+                              ),
+                              subtitle: Text(
+                                widget.order['loyaltyCreditRequested'] == true
+                                    ? 'Customer requested to use free cleaning credit on this order.'
+                                    : 'Deducts up to £${_maxRedeemableLoyalty.toStringAsFixed(2)} from customer loyalty balance.',
+                                style: _T.body(11.5, c: _P.textMuted),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
 
                     const SizedBox(height: 20),
 
@@ -4263,7 +4521,7 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    '$_totalCount total garment(s)',
+                                    '${_fmtQty(_totalCount)} total qty/item(s)',
                                     style: _T.body(11.5, c: const Color(0xFF9FB3C0)),
                                   ),
                                 ],
@@ -4298,6 +4556,31 @@ class _ItemizeOrderDialogState extends State<_ItemizeOrderDialog> {
                               children: [
                                 Text('Delivery Fee', style: _T.body(12, c: const Color(0xFFCAD5DE))),
                                 Text('£${_deliveryFee.toStringAsFixed(2)}', style: _T.label(12, w: FontWeight.w700, c: Colors.white)),
+                              ],
+                            ),
+                          ],
+                          if (_computedDiscount > 0) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  _discountType == 'percent'
+                                      ? 'Discount (${_fmtQty(_rawDiscountInput)}%)'
+                                      : 'Discount',
+                                  style: _T.body(12, c: const Color(0xFF47CD89)),
+                                ),
+                                Text('-£${_computedDiscount.toStringAsFixed(2)}', style: _T.label(12, w: FontWeight.w700, c: const Color(0xFF47CD89))),
+                              ],
+                            ),
+                          ],
+                          if (_appliedLoyaltyCredit > 0) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('Loyalty Credit', style: _T.body(12, c: const Color(0xFF47CD89))),
+                                Text('-£${_appliedLoyaltyCredit.toStringAsFixed(2)}', style: _T.label(12, w: FontWeight.w700, c: const Color(0xFF47CD89))),
                               ],
                             ),
                           ],

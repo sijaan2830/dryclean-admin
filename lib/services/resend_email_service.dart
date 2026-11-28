@@ -40,18 +40,20 @@ class ResendEmailService {
     }
 
     try {
-      final res = await http.post(
-        Uri.parse(_apiEndpoint),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': _apiKey,
-        },
-        body: jsonEncode({
-          'type': type,
-          'recipientEmail': to.trim(),
-          'order': _jsonSafe(order),
-        }),
-      );
+      final res = await http
+          .post(
+            Uri.parse(_apiEndpoint),
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': _apiKey,
+            },
+            body: jsonEncode({
+              'type': type,
+              'recipientEmail': to.trim(),
+              'order': _jsonSafe(order),
+            }),
+          )
+          .timeout(const Duration(seconds: 45));
 
       final isSuccess = res.statusCode >= 200 && res.statusCode < 300;
       debugPrint('[ResendEmailService] Dispatch to $to [$type] result: ${res.statusCode}');
@@ -149,13 +151,24 @@ class ResendEmailService {
           'ctaText': ctaText.trim(),
           'ctaUrl': ctaUrl.trim(),
         }),
-      ).timeout(const Duration(seconds: 60));
+      ).timeout(const Duration(seconds: 180));
       final body = res.body.isNotEmpty ? jsonDecode(res.body) : {};
-      final ok = res.statusCode >= 200 && res.statusCode < 300;
+      final bool serverOk = body is Map && body.containsKey('ok') ? body['ok'] == true : true;
+      final ok = res.statusCode >= 200 && res.statusCode < 300 && serverOk;
+      String? errMsg;
+      if (!ok) {
+        if (body is Map && body['error'] != null) {
+          errMsg = '${body['error']}';
+        } else if (body is Map && body['errors'] is List && (body['errors'] as List).isNotEmpty) {
+          errMsg = '${(body['errors'] as List).first}';
+        } else {
+          errMsg = 'Could not deliver emails (${res.statusCode})';
+        }
+      }
       return {
         'success': ok,
         if (body is Map) ...body.cast<String, dynamic>(),
-        if (!ok && body is Map && body['error'] != null) 'error': body['error'],
+        if (errMsg != null) 'error': errMsg,
       };
     } catch (e) {
       return {'success': false, 'error': '$e'};

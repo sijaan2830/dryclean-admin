@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:rxdart/rxdart.dart';
 
+import '../services/loyalty_sync_service.dart';
 import '../services/push_service.dart';
 import '../services/resend_email_service.dart';
 
@@ -483,6 +484,11 @@ class FirebaseAdminService extends ChangeNotifier {
         );
       }
 
+      if (newStatus == 'cancelled') {
+        await LoyaltySyncService.refundCreditIfCancelled(orderId);
+      }
+      await LoyaltySyncService.syncOrderById(orderId);
+
       // Automatically send Awaiting Approval bill or Delivered receipt + PDF email
       if (newStatus == 'awaiting_approval' || newStatus == 'delivered') {
         final orderPayload = Map<String, dynamic>.from(data)
@@ -552,6 +558,8 @@ class FirebaseAdminService extends ChangeNotifier {
       }
 
       await b.commit();
+
+      await LoyaltySyncService.syncOrderById(orderId);
 
       if (isPaid && userId.isNotEmpty && userId != 'website_guest' && userId != 'dummy') {
         PushService.send(
